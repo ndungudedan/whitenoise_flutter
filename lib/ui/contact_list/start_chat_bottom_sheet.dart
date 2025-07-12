@@ -1,16 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
-import 'package:whitenoise/ui/core/themes/colors.dart';
+import 'package:logging/logging.dart';
+import 'package:whitenoise/config/extensions/toast_extension.dart';
+import 'package:whitenoise/config/providers/group_provider.dart';
+import 'package:whitenoise/ui/core/themes/src/extensions.dart';
+import 'package:whitenoise/ui/core/ui/app_button.dart';
 import 'package:whitenoise/ui/core/ui/custom_bottom_sheet.dart';
-import 'package:whitenoise/ui/core/ui/custom_filled_button.dart';
+import 'package:whitenoise/utils/string_extensions.dart';
 
-class StartSecureChatBottomSheet extends StatelessWidget {
+class StartSecureChatBottomSheet extends ConsumerStatefulWidget {
   final String name;
   final String nip05;
   final String? bio;
   final String? imagePath;
+  final String pubkey;
   final VoidCallback? onStartChat;
+  final VoidCallback? onChatCreated;
   const StartSecureChatBottomSheet({
     super.key,
     required this.name,
@@ -18,23 +25,26 @@ class StartSecureChatBottomSheet extends StatelessWidget {
     this.bio,
     this.imagePath,
     this.onStartChat,
+    this.onChatCreated,
+    required this.pubkey,
   });
 
   static Future<void> show({
     required BuildContext context,
     required String name,
     required String nip05,
+    required String pubkey,
     String? bio,
     String? imagePath,
     VoidCallback? onStartChat,
+    VoidCallback? onChatCreated,
   }) {
     return CustomBottomSheet.show(
       context: context,
-      title: 'Start secure chat',
-      heightFactor: 0.55,
+      title: 'Start Secure Chat',
+      heightFactor: 0.65,
       blurSigma: 8.0,
       transitionDuration: const Duration(milliseconds: 400),
-      barrierColor: Colors.transparent,
       builder:
           (context) => StartSecureChatBottomSheet(
             name: name,
@@ -42,8 +52,65 @@ class StartSecureChatBottomSheet extends StatelessWidget {
             bio: bio,
             imagePath: imagePath,
             onStartChat: onStartChat,
+            onChatCreated: onChatCreated,
+            pubkey: pubkey,
           ),
     );
+  }
+
+  @override
+  ConsumerState<StartSecureChatBottomSheet> createState() => _StartSecureChatBottomSheetState();
+}
+
+class _StartSecureChatBottomSheetState extends ConsumerState<StartSecureChatBottomSheet> {
+  final _logger = Logger('StartSecureChatBottomSheet');
+  bool _isCreatingGroup = false;
+
+  Future<void> _createDirectMessageGroup() async {
+    setState(() {
+      _isCreatingGroup = true;
+    });
+
+    try {
+      final groupData = await ref
+          .read(groupsProvider.notifier)
+          .createNewGroup(
+            groupName: 'DM',
+            groupDescription: 'Direct message',
+            memberPublicKeyHexs: [widget.pubkey],
+            adminPublicKeyHexs: [widget.pubkey],
+          );
+
+      if (groupData != null) {
+        _logger.info('Direct message group created successfully: ${groupData.mlsGroupId}');
+
+        if (mounted) {
+          Navigator.pop(context);
+
+          // Call the appropriate callback
+          if (widget.onChatCreated != null) {
+            widget.onChatCreated!();
+          } else if (widget.onStartChat != null) {
+            widget.onStartChat!();
+          }
+
+          ref.showSuccessToast('Chat with ${widget.name} started successfully');
+        }
+      } else {
+        // Group creation failed - check the provider state for the error message
+        if (mounted) {
+          final groupsState = ref.read(groupsProvider);
+          final errorMessage = groupsState.error ?? 'Failed to create direct message group';
+          ref.showErrorToast(errorMessage);
+        }
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCreatingGroup = false;
+        });
+      }
+    }
   }
 
   @override
@@ -61,24 +128,22 @@ class StartSecureChatBottomSheet extends StatelessWidget {
                   width: 80.w,
                   height: 80.w,
                   decoration: BoxDecoration(
-                    color: Colors.orange,
+                    color: context.colors.warning,
                     borderRadius: BorderRadius.circular(40.r),
                   ),
                   child:
-                      imagePath != null && imagePath!.isNotEmpty
+                      widget.imagePath != null && widget.imagePath!.isNotEmpty
                           ? Image.network(
-                            imagePath!,
+                            widget.imagePath!,
                             width: 80.w,
                             height: 80.w,
                             fit: BoxFit.cover,
                             errorBuilder:
                                 (context, error, stackTrace) => Center(
                                   child: Text(
-                                    name.isNotEmpty
-                                        ? name[0].toUpperCase()
-                                        : '?',
+                                    widget.name.isNotEmpty ? widget.name[0].toUpperCase() : '?',
                                     style: TextStyle(
-                                      color: Colors.white,
+                                      color: context.colors.neutral,
                                       fontSize: 32.sp,
                                       fontWeight: FontWeight.bold,
                                     ),
@@ -87,9 +152,9 @@ class StartSecureChatBottomSheet extends StatelessWidget {
                           )
                           : Center(
                             child: Text(
-                              name.isNotEmpty ? name[0].toUpperCase() : '?',
+                              widget.name.isNotEmpty ? widget.name[0].toUpperCase() : '?',
                               style: TextStyle(
-                                color: Colors.white,
+                                color: context.colors.neutral,
                                 fontSize: 32.sp,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -99,28 +164,39 @@ class StartSecureChatBottomSheet extends StatelessWidget {
               ),
               Gap(12.h),
               Text(
-                name,
+                widget.name,
                 style: TextStyle(
                   fontSize: 24.sp,
                   fontWeight: FontWeight.w500,
-                  color: AppColors.glitch950,
+                  color: context.colors.primary,
+                ),
+              ),
+              Gap(12.h),
+
+              Text(
+                widget.nip05,
+                style: TextStyle(
+                  fontSize: 14.sp,
+                  color: context.colors.mutedForeground,
                 ),
               ),
               Gap(12.h),
               Text(
-                nip05,
-                style: TextStyle(fontSize: 14.sp, color: AppColors.glitch600),
+                widget.pubkey.formatPublicKey(),
+                textAlign: TextAlign.center,
               ),
-              if (bio != null && bio!.isNotEmpty) ...[
+              Gap(12.h),
+
+              if (widget.bio != null && widget.bio!.isNotEmpty) ...[
                 Gap(8.h),
                 Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16.w),
                   child: Text(
-                    bio!,
+                    widget.bio!,
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 14.sp,
-                      color: AppColors.glitch600,
+                      color: context.colors.mutedForeground,
                     ),
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
@@ -131,14 +207,9 @@ class StartSecureChatBottomSheet extends StatelessWidget {
             ],
           ),
         ),
-        CustomFilledButton(
-          onPressed: () {
-            Navigator.pop(context);
-            if (onStartChat != null) {
-              onStartChat!();
-            }
-          },
-          title: 'Start & Send Invite',
+        AppFilledButton(
+          onPressed: _isCreatingGroup ? null : _createDirectMessageGroup,
+          title: _isCreatingGroup ? 'Creating Chat...' : 'Start Chat',
         ),
       ],
     );

@@ -1,12 +1,16 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:logging/logging.dart';
+import 'package:path/path.dart' as path;
+import 'package:whitenoise/config/extensions/toast_extension.dart';
+import 'package:whitenoise/config/providers/active_account_provider.dart';
 import 'package:whitenoise/config/providers/auth_provider.dart';
 import 'package:whitenoise/config/states/profile_state.dart';
-import 'package:whitenoise/src/rust/api.dart';
+import 'package:whitenoise/src/rust/api/accounts.dart';
+import 'package:whitenoise/src/rust/api/utils.dart';
 
 class ProfileNotifier extends AsyncNotifier<ProfileState> {
-  final ImagePicker _imagePicker = ImagePicker();
+  final _logger = Logger('ProfileNotifier');
 
   @override
   Future<ProfileState> build() async {
@@ -18,158 +22,180 @@ class ProfileNotifier extends AsyncNotifier<ProfileState> {
 
     try {
       final authState = ref.read(authProvider);
-      if (authState.whitenoise == null || !authState.isAuthenticated) {
+      if (!authState.isAuthenticated) {
         state = AsyncValue.error(
-          'Not authenticated or Whitenoise not initialized',
+          'Not authenticated',
           StackTrace.current,
         );
         return;
       }
 
-      final account =
-          await ref.read(authProvider.notifier).getCurrentActiveAccount();
-
-      if (account == null) {
+      // Get active account data directly
+      final activeAccountData =
+          await ref.read(activeAccountProvider.notifier).getActiveAccountData();
+      if (activeAccountData == null) {
         state = AsyncValue.error('No active account found', StackTrace.current);
         return;
       }
 
-      final npub = await exportAccountNpub(
-        whitenoise: authState.whitenoise!,
-        account: account,
-      );
-
-      final publicKey = await publicKeyFromString(publicKeyString: npub);
+      final publicKey = await publicKeyFromString(publicKeyString: activeAccountData.pubkey);
       final metadata = await fetchMetadata(
-        whitenoise: authState.whitenoise!,
         pubkey: publicKey,
       );
 
       final profileState = ProfileState(
-        name: metadata?.name,
         displayName: metadata?.displayName,
         about: metadata?.about,
         picture: metadata?.picture,
-        banner: metadata?.banner,
-        website: metadata?.website,
         nip05: metadata?.nip05,
-        lud16: metadata?.lud16,
-        npub: npub,
+        selectedImagePath: '',
       );
 
-      state = AsyncValue.data(profileState);
+      state = AsyncValue.data(
+        profileState.copyWith(initialProfile: profileState),
+      );
     } catch (e, st) {
-      debugPrintStack(label: 'ProfileNotifier.loadProfileData', stackTrace: st);
+      _logger.severe('loadProfileData', e, st);
       state = AsyncValue.error(e.toString(), st);
+    } finally {
+      state = AsyncValue.data(
+        state.value!.copyWith(isSaving: false, stackTrace: null, error: null),
+      );
     }
   }
 
-  Future<String?> pickProfileImage() async {
-    try {
-      final XFile? image = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
+  void updateLocalProfile({
+    String? displayName,
+    String? about,
+    String? picture,
+    String? nip05,
+  }) {
+    state.whenData((value) {
+      state = AsyncValue.data(
+        value.copyWith(
+          displayName: displayName ?? value.displayName,
+          about: about ?? value.about,
+          picture: picture ?? value.picture,
+          nip05: nip05 ?? value.nip05,
+        ),
       );
-      if (image != null) {
-        return image.path;
-      }
-      return null;
-    } catch (e, st) {
-      debugPrintStack(
-        label: 'ProfileNotifier.pickProfileImage',
-        stackTrace: st,
-      );
-      return null;
-    }
+    });
   }
 
-  Future<String?> pickBannerImage() async {
+  void discardChanges() {
+    state.whenData((value) {
+      if (value.initialProfile != null) {
+        state = AsyncValue.data(
+          value.copyWith(
+            displayName: value.initialProfile!.displayName,
+            about: value.initialProfile!.about,
+            picture: value.initialProfile!.picture,
+            nip05: value.initialProfile!.nip05,
+          ),
+        );
+      }
+    });
+  }
+
+  Future<void> pickProfileImage(WidgetRef ref) async {
     try {
-      final XFile? image = await _imagePicker.pickImage(
+      final XFile? image = await ImagePicker().pickImage(
         source: ImageSource.gallery,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 85,
       );
       if (image != null) {
-        return image.path;
+        state.whenData(
+          (value) =>
+              state = AsyncValue.data(
+                value.copyWith(selectedImagePath: image.path),
+              ),
+        );
       }
-      return null;
     } catch (e, st) {
-      debugPrintStack(label: 'ProfileNotifier.pickBannerImage', stackTrace: st);
-      return null;
+      _logger.severe('pickProfileImage', e, st);
+      ref.showRawErrorToast('Failed to pick profile image');
     }
   }
 
   Future<void> updateProfileData({
-    String? name,
     String? displayName,
     String? about,
     String? picture,
-    String? banner,
     String? nip05,
-    String? lud16,
+    required WidgetRef ref,
   }) async {
+    state = AsyncValue.data(
+      state.value!.copyWith(isSaving: true, error: null, stackTrace: null),
+    );
     try {
-      state = const AsyncValue.loading();
-      //TODO: refine - use state object
+      String? profilePictureUrl;
       final authState = ref.read(authProvider);
-      if (authState.whitenoise == null || !authState.isAuthenticated) {
+      if (!authState.isAuthenticated) {
         state = AsyncValue.error('Not authenticated', StackTrace.current);
         return;
       }
 
-      final account =
-          await ref.read(authProvider.notifier).getCurrentActiveAccount();
-      if (account == null) {
+      // Get active account data directly
+      final activeAccountData =
+          await ref.read(activeAccountProvider.notifier).getActiveAccountData();
+      if (activeAccountData == null) {
         state = AsyncValue.error('No active account found', StackTrace.current);
         return;
       }
 
-      final npub = await exportAccountNpub(
-        whitenoise: authState.whitenoise!,
-        account: account,
-      );
+      if ((state.value?.selectedImagePath?.isNotEmpty) ?? false) {
+        final fileExtension = path.extension(state.value!.selectedImagePath!);
+        final imageType = await imageTypeFromExtension(extension_: fileExtension);
 
-      final publicKey = await publicKeyFromString(publicKeyString: npub);
+        final activeAccount = await ref.read(activeAccountProvider.notifier).getActiveAccountData();
+        if (activeAccount == null) {
+          ref.showRawErrorToast('No active account found');
+          return;
+        }
+
+        final serverUrl = await getDefaultBlossomServerUrl();
+        final publicKey = await publicKeyFromString(publicKeyString: activeAccount.pubkey);
+
+        profilePictureUrl = await uploadProfilePicture(
+          pubkey: publicKey,
+          serverUrl: serverUrl,
+          filePath: state.value!.selectedImagePath!,
+          imageType: imageType,
+        );
+      }
+
+      final publicKey = await publicKeyFromString(publicKeyString: activeAccountData.pubkey);
       final metadata = await fetchMetadata(
-        whitenoise: authState.whitenoise!,
         pubkey: publicKey,
       );
 
-      metadata?.name = name;
-      metadata?.displayName = displayName;
-      metadata?.about = about;
-      metadata?.picture = picture;
-      metadata?.banner = banner;
-      metadata?.nip05 = nip05;
-      metadata?.lud16 = lud16;
+      if (metadata == null) {
+        throw Exception('Metadata not found');
+      }
+      metadata.displayName = displayName;
+      metadata.about = about;
+      metadata.picture = profilePictureUrl;
+      metadata.nip05 = nip05;
 
-      final updatedData = metadata!;
+      // Create a new PublicKey object just before using it to avoid disposal issues
+      final publicKeyForUpdate = await publicKeyFromString(
+        publicKeyString: activeAccountData.pubkey,
+      );
 
       await updateMetadata(
-        whitenoise: authState.whitenoise!,
-        metadata: updatedData,
-        account: account,
+        pubkey: publicKeyForUpdate,
+        metadata: metadata,
       );
 
       await fetchProfileData();
-
-      state = AsyncValue.data(
-        ProfileState(
-          name: updatedData.name,
-          displayName: updatedData.displayName,
-          about: updatedData.about,
-          picture: updatedData.picture,
-          banner: updatedData.banner,
-          website: state.value?.website,
-          nip05: updatedData.nip05,
-          lud16: updatedData.lud16,
-          npub: npub,
-        ),
-      );
     } catch (e, st) {
-      debugPrintStack(
-        label: 'ProfileNotifier.updateProfileData',
-        stackTrace: st,
+      _logger.severe('updateProfileData', e, st);
+      state = AsyncValue.data(
+        state.value!.copyWith(isSaving: false, error: e, stackTrace: st),
       );
-      state = AsyncValue.error(e.toString(), st);
+      rethrow;
     }
   }
 }

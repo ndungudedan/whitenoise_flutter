@@ -1,13 +1,21 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:logging/logging.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:whitenoise/config/providers/account_provider.dart';
+import 'package:whitenoise/config/providers/active_account_provider.dart';
 import 'package:whitenoise/config/states/auth_state.dart';
 import 'package:whitenoise/src/rust/api.dart';
-import 'package:whitenoise/src/rust/frb_generated.dart';
+import 'package:whitenoise/src/rust/api/accounts.dart';
+import 'package:whitenoise/src/rust/api/utils.dart';
 
+/// Auth Provider
+///
+/// This provider manages authentication using the new PublicKey-based API.
 class AuthNotifier extends Notifier<AuthState> {
+  final _logger = Logger('AuthNotifier');
+
   @override
   AuthState build() {
     return const AuthState();
@@ -18,10 +26,7 @@ class AuthNotifier extends Notifier<AuthState> {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      // 1. Initialize Rust library
-      await RustLib.init();
-
-      /// 2. Create data and logs directories
+      /// 1. Create data and logs directories
       final dir = await getApplicationDocumentsDirectory();
       final dataDir = '${dir.path}/whitenoise/data';
       final logsDir = '${dir.path}/whitenoise/logs';
@@ -29,20 +34,47 @@ class AuthNotifier extends Notifier<AuthState> {
       await Directory(dataDir).create(recursive: true);
       await Directory(logsDir).create(recursive: true);
 
-      /// 3. Create config and initialize Whitenoise instance
+      /// 2. Create config and initialize Whitenoise instance
       final config = await createWhitenoiseConfig(
         dataDir: dataDir,
         logsDir: logsDir,
       );
-      final whitenoise = await initializeWhitenoise(config: config);
+      await initializeWhitenoise(config: config);
 
-      state = state.copyWith(whitenoise: whitenoise);
+      /// 3. Auto-login if an account is already active
+      try {
+        final accounts = await fetchAccounts();
+        if (accounts.isNotEmpty) {
+          // Wait for active account provider to load from storage first
+          final activeAccountNotifier = ref.read(activeAccountProvider.notifier);
+          await activeAccountNotifier.loadActiveAccount();
 
-      /// 4. Auto-login if an account is already active
-      final active = await getActiveAccount(whitenoise: state.whitenoise!);
-      state = state.copyWith(isAuthenticated: active != null);
+          final storedActivePubkey = ref.read(activeAccountProvider);
+          _logger.info('Stored active pubkey: $storedActivePubkey');
+
+          // Check if stored active account exists in current accounts
+          if (storedActivePubkey != null &&
+              accounts.any((account) => account.pubkey == storedActivePubkey)) {
+            _logger.info('Found valid stored active account: $storedActivePubkey');
+            state = state.copyWith(isAuthenticated: true);
+          } else {
+            // No valid stored active account, set the first one as active
+            _logger.info(
+              'No valid stored active account, setting first account as active: ${accounts.first.pubkey}',
+            );
+            await activeAccountNotifier.setActiveAccount(accounts.first.pubkey);
+            state = state.copyWith(isAuthenticated: true);
+          }
+        } else {
+          state = state.copyWith(isAuthenticated: false);
+        }
+      } catch (e) {
+        _logger.warning('Error during auto-login check: $e');
+        // If there's an error fetching accounts, assume not authenticated
+        state = state.copyWith(isAuthenticated: false);
+      }
     } catch (e, st) {
-      debugPrintStack(label: 'AuthState.initialize', stackTrace: st);
+      _logger.severe('initialize', e, st);
       state = state.copyWith(error: e.toString());
     } finally {
       state = state.copyWith(isLoading: false);
@@ -51,75 +83,175 @@ class AuthNotifier extends Notifier<AuthState> {
 
   /// Create a new account and set it as active
   Future<void> createAccount() async {
-    if (state.whitenoise == null) {
+    if (!state.isAuthenticated) {
       await initialize();
-    }
-
-    if (state.whitenoise == null) {
-      final previousError = state.error;
-      state = state.copyWith(
-        error:
-            'Could not initialize Whitenoise: $previousError, account creation failed.',
-      );
-      return;
     }
 
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      await createIdentity(whitenoise: state.whitenoise!);
+      final account = await createIdentity();
+
+      // Account created successfully
+
+      // Get the newly created account data and set it as active
+      final accountData = await convertAccountToData(account: account);
+      await ref.read(activeAccountProvider.notifier).setActiveAccount(accountData.pubkey);
+
       state = state.copyWith(isAuthenticated: true);
 
       // Load account data after creating identity
-      await ref.read(accountProvider.notifier).loadAccount();
+      await ref.read(accountProvider.notifier).loadAccountData();
     } catch (e, st) {
-      debugPrintStack(label: 'AuthState.createAccount', stackTrace: st);
+      _logger.severe('createAccount', e, st);
       state = state.copyWith(error: e.toString());
     } finally {
       state = state.copyWith(isLoading: false);
     }
   }
 
+  /// Create account in background without showing loading state
+  Future<void> createAccountInBackground() async {
+    if (!state.isAuthenticated) {
+      await initialize();
+    }
+
+    state = state.copyWith(error: null);
+
+    try {
+      final account = await createIdentity();
+
+      // Account created successfully
+
+      // Get the newly created account data and set it as active
+      final accountData = await convertAccountToData(account: account);
+      await ref.read(activeAccountProvider.notifier).setActiveAccount(accountData.pubkey);
+
+      state = state.copyWith(isAuthenticated: true);
+
+      // Load account data after creating identity
+      await ref.read(accountProvider.notifier).loadAccountData();
+    } catch (e, st) {
+      _logger.severe('createAccountInBackground', e, st);
+      state = state.copyWith(error: e.toString());
+    }
+  }
+
   /// Login with a private key (nsec or hex)
   Future<void> loginWithKey(String nsecOrPrivkey) async {
-    if (state.whitenoise == null) {
+    if (!state.isAuthenticated) {
       await initialize();
-      return;
     }
 
     state = state.copyWith(isLoading: true, error: null);
 
     try {
       /// 1. Perform login using Rust API
-      final account = await login(
-        whitenoise: state.whitenoise!,
-        nsecOrHexPrivkey: nsecOrPrivkey.trim(),
-      );
+      final account = await login(nsecOrHexPrivkey: nsecOrPrivkey);
 
-      /// 2. Mark the account as active
-      await updateActiveAccount(
-        whitenoise: state.whitenoise!,
-        account: account,
-      );
+      // Account logged in successfully
+
+      // Get the logged in account data and set it as active
+      final accountData = await convertAccountToData(account: account);
+      await ref.read(activeAccountProvider.notifier).setActiveAccount(accountData.pubkey);
+
       state = state.copyWith(isAuthenticated: true);
 
       // Load account data after login
-      await ref.read(accountProvider.notifier).loadAccount();
+      await ref.read(accountProvider.notifier).loadAccountData();
     } catch (e, st) {
-      state = state.copyWith(error: e.toString());
-      debugPrintStack(label: 'AuthState.loginWithKey', stackTrace: st);
+      String errorMessage;
+
+      // Check if it's a WhitenoiseError and convert it to a readable message
+      if (e is WhitenoiseError) {
+        try {
+          errorMessage = await whitenoiseErrorToString(error: e);
+          if (errorMessage.contains('InvalidSecretKey')) {
+            errorMessage = 'Invalid nsec or private key';
+          }
+        } catch (conversionError) {
+          // Fallback if conversion fails
+          errorMessage = 'Invalid nsec or private key';
+        }
+        // Log the user-friendly error message for WhitenoiseError instead of the raw exception
+        _logger.warning('loginWithKey failed: $errorMessage');
+      } else {
+        errorMessage = e.toString();
+        // Log unexpected errors as severe with full stack trace
+        _logger.severe('loginWithKey unexpected error', e, st);
+      }
+
+      state = state.copyWith(error: errorMessage);
     } finally {
       state = state.copyWith(isLoading: false);
     }
   }
 
-  /// Get the currently active account (if any)
-  Future<Account?> getCurrentActiveAccount() async {
-    if (state.whitenoise == null) {
+  /// Login with a private key in background without showing loading state
+  Future<void> loginWithKeyInBackground(String nsecOrPrivkey) async {
+    if (!state.isAuthenticated) {
       await initialize();
     }
+
+    state = state.copyWith(error: null);
+
     try {
-      return await getActiveAccount(whitenoise: state.whitenoise!);
+      /// 1. Perform login using Rust API
+      final account = await login(nsecOrHexPrivkey: nsecOrPrivkey);
+
+      // Account logged in successfully
+
+      // Get the logged in account data and set it as active
+      final accountData = await convertAccountToData(account: account);
+      await ref.read(activeAccountProvider.notifier).setActiveAccount(accountData.pubkey);
+
+      state = state.copyWith(isAuthenticated: true);
+
+      // Load account data after login
+      await ref.read(accountProvider.notifier).loadAccountData();
+    } catch (e, st) {
+      String errorMessage;
+
+      // Check if it's a WhitenoiseError and convert it to a readable message
+      if (e is WhitenoiseError) {
+        try {
+          errorMessage = await whitenoiseErrorToString(error: e);
+          if (errorMessage.contains('InvalidSecretKey')) {
+            errorMessage = 'Invalid nsec or private key';
+          }
+        } catch (conversionError) {
+          // Fallback if conversion fails
+          errorMessage = 'Invalid nsec or private key';
+        }
+        // Log the user-friendly error message for WhitenoiseError instead of the raw exception
+        _logger.warning('loginWithKeyInBackground failed: $errorMessage');
+      } else {
+        errorMessage = e.toString();
+        // Log unexpected errors as severe with full stack trace
+        _logger.severe('loginWithKeyInBackground unexpected error', e, st);
+      }
+
+      state = state.copyWith(error: errorMessage);
+    }
+  }
+
+  /// Get the currently active account (if any)
+  Future<Account?> getCurrentActiveAccount() async {
+    if (!state.isAuthenticated) {
+      return null;
+    }
+    try {
+      // Try to get accounts and find the first one (active account)
+      final accounts = await fetchAccounts();
+      if (accounts.isNotEmpty) {
+        // Return the first account as the active one
+        // In a real implementation, you might want to store which account is active
+        // We need to create an Account object from AccountData
+        // For now, we'll use a workaround - we need to get the actual Account object
+        // This is a limitation of the current API design
+        return null; // This will be handled by the calling code
+      }
+      return null;
     } catch (e) {
       state = state.copyWith(error: e.toString());
       return null;
@@ -128,24 +260,66 @@ class AuthNotifier extends Notifier<AuthState> {
 
   /// Logout the currently active account (if any)
   Future<void> logoutCurrentAccount() async {
-    if (state.whitenoise == null) {
-      state = state.copyWith(isAuthenticated: false);
-      return;
-    }
-
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      final active = await getActiveAccount(whitenoise: state.whitenoise!);
-      if (active != null) {
-        await logout(whitenoise: state.whitenoise!, account: active);
+      final activeAccountData =
+          await ref.read(activeAccountProvider.notifier).getActiveAccountData();
+      if (activeAccountData != null) {
+        final publicKey = await publicKeyFromString(
+          publicKeyString: activeAccountData.pubkey,
+        );
+        await logout(pubkey: publicKey);
+
+        // Clear the active account
+        await ref.read(activeAccountProvider.notifier).clearActiveAccount();
+
+        // Check if there are other accounts available
+        final remainingAccounts = await fetchAccounts();
+        final otherAccounts =
+            remainingAccounts
+                .where(
+                  (account) => account.pubkey != activeAccountData.pubkey,
+                )
+                .toList();
+
+        if (otherAccounts.isNotEmpty) {
+          // Switch to the first available account
+          _logger.info('Switching to another account after logout: ${otherAccounts.first.pubkey}');
+          await ref
+              .read(activeAccountProvider.notifier)
+              .setActiveAccount(otherAccounts.first.pubkey);
+
+          // Reload account data for the new active account
+          await ref.read(accountProvider.notifier).loadAccountData();
+
+          // Keep authenticated state as true since we have another account
+          state = state.copyWith(isAuthenticated: true, isLoading: false);
+        } else {
+          // No other accounts available, set as unauthenticated
+          _logger.info('No other accounts available after logout, setting unauthenticated');
+          state = state.copyWith(isAuthenticated: false, isLoading: false);
+        }
+      } else {
+        // No active account to logout, but check if any accounts exist
+        final accounts = await fetchAccounts();
+        if (accounts.isNotEmpty) {
+          // Set the first account as active
+          await ref.read(activeAccountProvider.notifier).setActiveAccount(accounts.first.pubkey);
+          await ref.read(accountProvider.notifier).loadAccountData();
+          state = state.copyWith(isAuthenticated: true, isLoading: false);
+        } else {
+          state = state.copyWith(isAuthenticated: false, isLoading: false);
+        }
       }
     } catch (e, st) {
-      state = state.copyWith(error: e.toString());
-      debugPrintStack(label: 'AuthState.logoutCurrentAccount', stackTrace: st);
-    } finally {
-      state = state.copyWith(isAuthenticated: false, isLoading: false);
+      state = state.copyWith(error: e.toString(), isLoading: false);
+      _logger.severe('logoutCurrentAccount', e, st);
     }
+  }
+
+  void setUnAuthenticated() {
+    state = const AuthState();
   }
 }
 

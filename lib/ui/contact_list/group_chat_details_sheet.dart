@@ -1,20 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:gap/gap.dart';
+
+import 'package:whitenoise/config/extensions/toast_extension.dart';
+import 'package:whitenoise/config/providers/group_provider.dart';
 import 'package:whitenoise/domain/models/contact_model.dart';
-import 'package:whitenoise/ui/contact_list/chat_invitation_sheet.dart';
+import 'package:whitenoise/src/rust/api/relays.dart';
+import 'package:whitenoise/src/rust/api/utils.dart';
+import 'package:whitenoise/ui/contact_list/share_invite_bottom_sheet.dart';
 import 'package:whitenoise/ui/contact_list/widgets/contact_list_tile.dart';
 import 'package:whitenoise/ui/core/themes/assets.dart';
-import 'package:whitenoise/ui/core/themes/colors.dart';
+import 'package:whitenoise/ui/core/themes/src/extensions.dart';
+import 'package:whitenoise/ui/core/ui/app_button.dart';
 import 'package:whitenoise/ui/core/ui/custom_bottom_sheet.dart';
-import 'package:whitenoise/ui/core/ui/custom_filled_button.dart';
 import 'package:whitenoise/ui/core/ui/custom_textfield.dart';
 
-class GroupChatDetailsSheet extends StatefulWidget {
+class GroupChatDetailsSheet extends ConsumerStatefulWidget {
   final List<ContactModel> selectedContacts;
 
-  const GroupChatDetailsSheet({super.key, required this.selectedContacts});
+  const GroupChatDetailsSheet({
+    super.key,
+    required this.selectedContacts,
+  });
 
   static Future<void> show({
     required BuildContext context,
@@ -25,26 +34,26 @@ class GroupChatDetailsSheet extends StatefulWidget {
       title: 'Group chat details',
       blurSigma: 8.0,
       transitionDuration: const Duration(milliseconds: 400),
-      barrierColor: Colors.transparent,
-      builder:
-          (context) =>
-              GroupChatDetailsSheet(selectedContacts: selectedContacts),
+      builder: (context) => GroupChatDetailsSheet(selectedContacts: selectedContacts),
     );
   }
 
   @override
-  State<GroupChatDetailsSheet> createState() => _GroupChatDetailsSheetState();
+  ConsumerState<GroupChatDetailsSheet> createState() => _GroupChatDetailsSheetState();
 }
 
-class _GroupChatDetailsSheetState extends State<GroupChatDetailsSheet> {
+class _GroupChatDetailsSheetState extends ConsumerState<GroupChatDetailsSheet> {
   final TextEditingController _groupNameController = TextEditingController();
   bool _hasGroupImage = false;
   bool _isGroupNameValid = false;
+  bool _isCreatingGroup = false;
+  bool _hasContactsWithKeyPackage = true;
 
   @override
   void initState() {
     super.initState();
     _groupNameController.addListener(_onGroupNameChanged);
+    _checkContactsKeyPackages();
   }
 
   void _onGroupNameChanged() {
@@ -56,6 +65,79 @@ class _GroupChatDetailsSheetState extends State<GroupChatDetailsSheet> {
     }
   }
 
+  Future<void> _checkContactsKeyPackages() async {
+    try {
+      final filteredContacts = await _filterContactsByKeyPackage(widget.selectedContacts);
+      final contactsWithKeyPackage = filteredContacts['withKeyPackage']!;
+
+      setState(() {
+        _hasContactsWithKeyPackage = contactsWithKeyPackage.isNotEmpty;
+      });
+    } catch (e) {
+      // If there's an error checking keypackages, assume no contacts have keypackages
+      setState(() {
+        _hasContactsWithKeyPackage = false;
+      });
+    }
+  }
+
+  void _createGroupChat() async {
+    if (!_isGroupNameValid) return;
+    final groupName = _groupNameController.text.trim();
+
+    setState(() {
+      _isCreatingGroup = true;
+    });
+
+    try {
+      // Filter contacts based on keypackage availability
+      final filteredContacts = await _filterContactsByKeyPackage(widget.selectedContacts);
+      final contactsWithKeyPackage = filteredContacts['withKeyPackage']!;
+      final contactsWithoutKeyPackage = filteredContacts['withoutKeyPackage']!;
+
+      if (contactsWithKeyPackage.isEmpty) {
+        ref.showErrorToast('No contacts have keypackages available for group creation');
+        return;
+      }
+
+      // Create group with contacts that have keypackages
+      final groupData = await ref
+          .read(groupsProvider.notifier)
+          .createNewGroup(
+            groupName: groupName,
+            groupDescription: '',
+            memberPublicKeyHexs: contactsWithKeyPackage.map((c) => c.publicKey).toList(),
+            adminPublicKeyHexs: [],
+          );
+
+      if (mounted) {
+        if (groupData != null) {
+          Navigator.of(context).pop();
+
+          // Show share invite bottom sheet for members without keypackages
+          if (contactsWithoutKeyPackage.isNotEmpty) {
+            await ShareInviteBottomSheet.show(
+              context: context,
+              contacts: contactsWithoutKeyPackage,
+            );
+          }
+        } else {
+          ref.showErrorToast('Failed to create group chat. Please try again.');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ref.showErrorToast('Error creating group: ${e.toString()}');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCreatingGroup = false;
+        });
+      }
+    }
+  }
+
   @override
   void dispose() {
     _groupNameController.removeListener(_onGroupNameChanged);
@@ -63,10 +145,39 @@ class _GroupChatDetailsSheetState extends State<GroupChatDetailsSheet> {
     super.dispose();
   }
 
+  /// Filters contacts by keypackage availability
+  Future<Map<String, List<ContactModel>>> _filterContactsByKeyPackage(
+    List<ContactModel> contacts,
+  ) async {
+    final contactsWithKeyPackage = <ContactModel>[];
+    final contactsWithoutKeyPackage = <ContactModel>[];
+
+    for (final contact in contacts) {
+      try {
+        final pubkey = await publicKeyFromString(publicKeyString: contact.publicKey);
+        final keyPackage = await fetchKeyPackage(pubkey: pubkey);
+
+        if (keyPackage != null) {
+          contactsWithKeyPackage.add(contact);
+        } else {
+          contactsWithoutKeyPackage.add(contact);
+        }
+      } catch (e) {
+        // If there's an error checking keypackage, assume contact doesn't have one
+        contactsWithoutKeyPackage.add(contact);
+      }
+    }
+
+    return {
+      'withKeyPackage': contactsWithKeyPackage,
+      'withoutKeyPackage': contactsWithoutKeyPackage,
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Center(
           child: GestureDetector(
@@ -78,8 +189,9 @@ class _GroupChatDetailsSheetState extends State<GroupChatDetailsSheet> {
             child: Container(
               width: 80.w,
               height: 80.w,
-              decoration: const BoxDecoration(
-                color: AppColors.glitch80,
+              padding: EdgeInsets.all(16.w),
+              decoration: BoxDecoration(
+                color: context.colors.baseMuted,
                 shape: BoxShape.circle,
               ),
               child:
@@ -95,8 +207,8 @@ class _GroupChatDetailsSheetState extends State<GroupChatDetailsSheet> {
                         AssetsPaths.icCamera,
                         width: 42.w,
                         height: 42.w,
-                        colorFilter: const ColorFilter.mode(
-                          AppColors.glitch600,
+                        colorFilter: ColorFilter.mode(
+                          context.colors.mutedForeground,
                           BlendMode.srcIn,
                         ),
                       ),
@@ -114,7 +226,7 @@ class _GroupChatDetailsSheetState extends State<GroupChatDetailsSheet> {
                 style: TextStyle(
                   fontSize: 14.sp,
                   fontWeight: FontWeight.w500,
-                  color: AppColors.glitch950,
+                  color: context.colors.primary,
                 ),
               ),
               Gap(8.h),
@@ -134,7 +246,7 @@ class _GroupChatDetailsSheetState extends State<GroupChatDetailsSheet> {
             style: TextStyle(
               fontSize: 14.sp,
               fontWeight: FontWeight.w500,
-              color: AppColors.glitch950,
+              color: context.colors.primary,
             ),
           ),
         ),
@@ -149,21 +261,17 @@ class _GroupChatDetailsSheetState extends State<GroupChatDetailsSheet> {
             },
           ),
         ),
-        CustomFilledButton(
-          onPressed:
-              _isGroupNameValid
-                  ? () {
-                    ChatInvitationSheet.show(
-                      context: context,
-                      name: 'John Doe',
-                      nip05: 'john@example.com',
-                      publicKey: '1234567890',
-                      onAccept: () {},
-                      onDecline: () {},
-                    );
-                  }
-                  : null,
-          title: 'Create Group',
+        SafeArea(
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16.w).copyWith(bottom: 16.h),
+            child: AppFilledButton(
+              onPressed:
+                  _isCreatingGroup || !_isGroupNameValid || !_hasContactsWithKeyPackage
+                      ? null
+                      : () => _createGroupChat(),
+              title: _isCreatingGroup ? 'Creating Group...' : 'Create Group',
+            ),
+          ),
         ),
       ],
     );

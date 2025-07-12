@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
-import 'package:whitenoise/config/providers/account_provider.dart';
+import 'package:logging/logging.dart';
+import 'package:whitenoise/config/extensions/toast_extension.dart';
+import 'package:whitenoise/config/providers/active_account_provider.dart';
 import 'package:whitenoise/config/providers/contacts_provider.dart';
-import 'package:whitenoise/domain/models/contact_model.dart';
 import 'package:whitenoise/domain/models/chat_model.dart';
-import 'package:whitenoise/domain/dummy_data/dummy_chats.dart';
-import 'package:whitenoise/src/rust/api.dart';
+import 'package:whitenoise/domain/models/contact_model.dart';
+import 'package:whitenoise/src/rust/api/accounts.dart';
+import 'package:whitenoise/src/rust/api/utils.dart';
 import 'package:whitenoise/ui/contact_list/widgets/contact_list_tile.dart';
 import 'package:whitenoise/ui/core/ui/custom_bottom_sheet.dart';
 import 'package:whitenoise/ui/core/ui/custom_textfield.dart';
@@ -16,14 +18,12 @@ class SearchChatBottomSheet extends ConsumerStatefulWidget {
   const SearchChatBottomSheet({super.key});
 
   @override
-  ConsumerState<SearchChatBottomSheet> createState() =>
-      _SearchChatBottomSheetState();
+  ConsumerState<SearchChatBottomSheet> createState() => _SearchChatBottomSheetState();
 
   static Future<void> show(BuildContext context) {
     return CustomBottomSheet.show(
       context: context,
       title: 'Search',
-      barrierColor: Colors.transparent,
       blurSigma: 8.0,
       transitionDuration: const Duration(milliseconds: 400),
       builder: (_) => const SearchChatBottomSheet(),
@@ -33,15 +33,18 @@ class SearchChatBottomSheet extends ConsumerStatefulWidget {
 
 class _SearchChatBottomSheetState extends ConsumerState<SearchChatBottomSheet> {
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  final FocusNode _searchFocusNode = FocusNode();
   String _searchQuery = '';
   bool _hasSearchResults = false;
-  final Map<String, PublicKey> _publicKeyMap =
-      {}; // Map ContactModel.publicKey to real PublicKey
+  final Map<String, PublicKey> _publicKeyMap = {}; // Map ContactModel.publicKey to real PublicKey
+  final _logger = Logger('SearchChatBottomSheet');
 
   @override
   void initState() {
     super.initState();
     _searchController.addListener(_onSearchChanged);
+    _scrollController.addListener(_onScrollChanged);
     // Load contacts when the widget initializes
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadContacts();
@@ -51,7 +54,10 @@ class _SearchChatBottomSheetState extends ConsumerState<SearchChatBottomSheet> {
   @override
   void dispose() {
     _searchController.removeListener(_onSearchChanged);
+    _scrollController.removeListener(_onScrollChanged);
     _searchController.dispose();
+    _scrollController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -62,33 +68,38 @@ class _SearchChatBottomSheetState extends ConsumerState<SearchChatBottomSheet> {
     });
   }
 
-  Future<void> _loadContacts() async {
-    try {
-      final accountState = ref.read(accountProvider);
-
-      // If pubkey is null, try to load the account first
-      if (accountState.pubkey == null) {
-        await ref.read(accountProvider.notifier).loadAccount();
-        final updatedAccountState = ref.read(accountProvider);
-
-        if (updatedAccountState.pubkey == null) {
-          // Still no pubkey, show error
-          // Handle error through proper method
-          debugPrint('No active account found. Please login first.');
-          return;
-        }
-      }
-
-      final pubkey = ref.read(accountProvider).pubkey!;
-      await ref.read(contactsProvider.notifier).loadContacts(pubkey);
-    } catch (e) {
-      debugPrint('Error loading contacts in search chat: $e');
-      // Handle error through proper method
-      debugPrint('Failed to load contacts: $e');
+  void _onScrollChanged() {
+    // Unfocus the text field when user starts scrolling
+    if (_searchFocusNode.hasFocus) {
+      _searchFocusNode.unfocus();
     }
   }
 
-  List<ContactModel> _getFilteredContacts(Map<PublicKey, Metadata?>? contacts) {
+  Future<void> _loadContacts() async {
+    try {
+      // Get the active account data directly
+      final activeAccountData =
+          await ref.read(activeAccountProvider.notifier).getActiveAccountData();
+
+      if (activeAccountData != null) {
+        _logger.info('SearchChatBottomSheet: Found active account: ${activeAccountData.pubkey}');
+        await ref.read(contactsProvider.notifier).loadContacts(activeAccountData.pubkey);
+        _logger.info('SearchChatBottomSheet: Contacts loaded successfully');
+      } else {
+        _logger.severe('SearchChatBottomSheet: No active account found');
+        if (mounted) {
+          ref.showErrorToast('No active account found');
+        }
+      }
+    } catch (e) {
+      _logger.severe('SearchChatBottomSheet: Error loading contacts: $e');
+      if (mounted) {
+        ref.showErrorToast('Error loading contacts: $e');
+      }
+    }
+  }
+
+  List<ContactModel> _getFilteredContacts(Map<PublicKey, MetadataData?>? contacts) {
     if (_searchQuery.isEmpty || contacts == null) return [];
 
     final contactModels = <ContactModel>[];
@@ -121,17 +132,8 @@ class _SearchChatBottomSheetState extends ConsumerState<SearchChatBottomSheet> {
   }
 
   List<ChatModel> _getFilteredChats() {
-    if (_searchQuery.isEmpty) return [];
-
-    return dummyChats
-        .where(
-          (chat) =>
-              chat.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-              chat.lastMessage.toLowerCase().contains(
-                _searchQuery.toLowerCase(),
-              ),
-        )
-        .toList();
+    // No dummy chats anymore - return empty list
+    return [];
   }
 
   @override
@@ -144,11 +146,13 @@ class _SearchChatBottomSheetState extends ConsumerState<SearchChatBottomSheet> {
       children: [
         CustomTextField(
           textController: _searchController,
+          focusNode: _searchFocusNode,
           hintText: 'Search contacts and chats...',
         ),
         if (_hasSearchResults) ...[
           Expanded(
             child: ListView(
+              controller: _scrollController,
               padding: EdgeInsets.symmetric(horizontal: 16.w),
               children: [
                 // Chats section
@@ -166,16 +170,12 @@ class _SearchChatBottomSheetState extends ConsumerState<SearchChatBottomSheet> {
                       leading: CircleAvatar(
                         radius: 20.r,
                         backgroundImage:
-                            chat.imagePath.isNotEmpty
-                                ? AssetImage(chat.imagePath)
-                                : null,
+                            chat.imagePath.isNotEmpty ? AssetImage(chat.imagePath) : null,
                         backgroundColor: Colors.orange,
                         child:
                             chat.imagePath.isEmpty
                                 ? Text(
-                                  chat.name.isNotEmpty
-                                      ? chat.name[0].toUpperCase()
-                                      : '?',
+                                  chat.name.isNotEmpty ? chat.name[0].toUpperCase() : '?',
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 16.sp,
@@ -261,29 +261,20 @@ class _SearchChatBottomSheetState extends ConsumerState<SearchChatBottomSheet> {
                       onDelete: () async {
                         try {
                           // Get the real PublicKey from our map
-                          final realPublicKey =
-                              _publicKeyMap[contact.publicKey];
+                          final realPublicKey = _publicKeyMap[contact.publicKey];
                           if (realPublicKey != null) {
                             // Use the proper method to remove contact from Rust backend
                             await ref
                                 .read(contactsProvider.notifier)
                                 .removeContactByPublicKey(realPublicKey);
 
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Contact removed successfully'),
-                                ),
-                              );
+                            if (context.mounted) {
+                              ref.showSuccessToast('Contact removed successfully');
                             }
                           }
                         } catch (e) {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Failed to remove contact: $e'),
-                              ),
-                            );
+                          if (context.mounted) {
+                            ref.showErrorToast('Failed to remove contact: $e');
                           }
                         }
                       },

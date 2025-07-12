@@ -1,6 +1,6 @@
-part of 'light.dart';
+import 'package:whitenoise/ui/core/themes/src/colors.dart';
 
-const lightColorsExt = AppColorsThemeExt(
+const fallbackColorsExt = AppColorsThemeExt(
   primary: LightAppColors.primary,
   neutral: LightAppColors.neutral,
   success: LightAppColors.lime,
@@ -8,9 +8,8 @@ const lightColorsExt = AppColorsThemeExt(
   tertiary: LightAppColors.tertiary,
   secondary: LightAppColors.secondary,
   neutralVariant: LightAppColors.neutralVariant,
-
   baseChat2: LightAppColors.baseChat2,
-  primaryBackground: LightAppColors.primaryBackground,
+  primaryForeground: LightAppColors.primaryForeground,
   secondaryForeground: LightAppColors.secondaryForeground,
   mutedForeground: LightAppColors.mutedForeground,
   baseMuted: LightAppColors.baseMuted,
@@ -21,4 +20,26 @@ const lightColorsExt = AppColorsThemeExt(
   teal600: LightAppColors.teal600,
   rose: LightAppColors.rose,
   lime: LightAppColors.lime,
+  appBarBackground: LightAppColors.appBarBackground,
+  appBarForeground: LightAppColors.appBarForeground,
+  bottomSheetBarrier: LightAppColors.bottomSheetBarrier,
+  link: LightAppColors.link,
+  border: LightAppColors.border,
+  avatarSurface: LightAppColors.avatarSurface,
+  solidPrimary: LightAppColors.solidPrimary,
+  input: LightAppColors.input,
+  meChatBubble: LightAppColors.meChatBubble,
+  contactChatBubble: LightAppColors.contactChatBubble,
+  meChatBubbleText: LightAppColors.meChatBubbleText,
+  contactChatBubbleText: LightAppColors.contactChatBubbleText,
+  overlay: LightAppColors.overlay,
+  surface: LightAppColors.surface,
+  solidNeutralBlack: LightAppColors.solidNeutralBlack,
+  solidNeutralWhite: LightAppColors.solidNeutralWhite,
+  primarySolid: LightAppColors.primarySolid,
+  toastSurface: LightAppColors.toastSurface,
+  toastSuccess: LightAppColors.toastSuccess,
+  toastError: LightAppColors.toastError,
+  toastWarning: LightAppColors.toastWarning,
+  toastIcon: LightAppColors.toastIcon,
 );

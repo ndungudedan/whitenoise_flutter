@@ -1,95 +1,7 @@
 import 'package:flutter/material.dart';
 
-class LightAppColors {
-  /// base/primary, custom colors/glitch-950
-  static const primary = Color(0xff202320);
-
-  /// base/secondary
-  static const secondary = Color(0xffF2F2F2);
-  static const tertiary = Color(0xFFE9F1FE);
-  static const neutral = Color(0xFFFFFFFF);
-  static const neutralVariant = Color(0xFFF4F6F9);
-
-  /// base/background
-  static const primaryBackground = Color(0xffF9F9F9);
-
-  /// base/accent-foreground, base/secondary-foreground, base/foreground
-  static const secondaryForeground = Color(0xff2D312D);
-
-  /// base/muted-foreground
-  static const mutedForeground = Color(0xFF727772);
-
-  /// base/muted, base/input
-  static const baseMuted = Color(0xffE2E2E2);
-
-  /// Text/Default/Secondary
-  static const textDefaultSecondary = Color(0xff757575);
-
-  static const success = Color(0xFF2EA970);
-
-  /// base/destructive
-  static const destructive = Color(0xFFDC2626);
-
-  /// base/warning
-  static const warning = Color(0xffEA580C);
-
-  static const baseChat = Color(0xff2A9D90);
-  static const baseChat2 = Color(0xffE76E50);
-  static const teal200 = Color(0xff99F6E4);
-  static const teal600 = Color(0xFF0D9488);
-
-  /// tailwind colors/rose/500
-  static const rose = Color(0xFFF43F5E);
-
-  /// tailwind colors/lime/500
-  static const lime = Color(0xff84CC16);
-}
-
-/// Dark theme colors
-class DarkAppColors {
-  /// base/primary, Custom inverted for dark mode
-  static const primary = Color(0xffF9F9F9);
-
-  /// base/secondary
-  static const secondary = Color(0xff202320);
-  static const tertiary = Color(0xFF1A2B4B);
-  static const neutral = Color(0xFF121212);
-  static const neutralVariant = Color(0xFF2C2C2C);
-
-  /// base/background
-  static const primaryBackground = Color(0xff2D312D);
-
-  /// base/accent-foreground, base/secondary-foreground, base/foreground
-  static const secondaryForeground = Color(0xffF2F2F2);
-
-  /// base/muted-foreground
-  static const mutedForeground = Color(0xFFAFB1AF);
-
-  /// base/muted, base/input
-  static const baseMuted = Color(0xff474C47);
-
-  /// Text/Default/Secondary
-  static const textDefaultSecondary = Color(0xffCDCECD);
-
-  static const success = Color(0xFF4ADE80);
-
-  /// base/destructive
-  static const destructive = Color(0xFFEF4444);
-
-  /// base/warning
-  static const warning = Color(0xffF97316);
-
-  static const baseChat = Color(0xff2A9D90);
-  static const baseChat2 = Color(0xffE76E50);
-  static const teal200 = Color(0xff99F6E4);
-  static const teal600 = Color(0xFF0D9488);
-
-  /// tailwind colors/rose/500
-  static const rose = Color(0xFFF43F5E);
-
-  /// tailwind colors/lime/500
-  static const lime = Color(0xff84CC16);
-}
+part 'colors_light.dart';
+part 'colors_dark.dart';
 
 class AppColorsThemeExt extends ThemeExtension<AppColorsThemeExt> {
   const AppColorsThemeExt({
@@ -98,7 +10,7 @@ class AppColorsThemeExt extends ThemeExtension<AppColorsThemeExt> {
     required this.tertiary,
     required this.neutral,
     required this.neutralVariant,
-    required this.primaryBackground,
+    required this.primaryForeground,
     required this.secondaryForeground,
     required this.mutedForeground,
     required this.baseMuted,
@@ -112,6 +24,28 @@ class AppColorsThemeExt extends ThemeExtension<AppColorsThemeExt> {
     required this.teal600,
     required this.rose,
     required this.lime,
+    required this.appBarBackground,
+    required this.appBarForeground,
+    required this.bottomSheetBarrier,
+    required this.link,
+    required this.border,
+    required this.avatarSurface,
+    required this.solidPrimary,
+    required this.input,
+    required this.meChatBubble,
+    required this.contactChatBubble,
+    required this.meChatBubbleText,
+    required this.contactChatBubbleText,
+    required this.overlay,
+    required this.surface,
+    required this.solidNeutralBlack,
+    required this.solidNeutralWhite,
+    required this.primarySolid,
+    required this.toastSurface,
+    required this.toastSuccess,
+    required this.toastError,
+    required this.toastWarning,
+    required this.toastIcon,
   });
 
   final Color primary;
@@ -119,7 +53,7 @@ class AppColorsThemeExt extends ThemeExtension<AppColorsThemeExt> {
   final Color tertiary;
   final Color neutral;
   final Color neutralVariant;
-  final Color primaryBackground;
+  final Color primaryForeground;
   final Color secondaryForeground;
   final Color mutedForeground;
   final Color baseMuted;
@@ -133,6 +67,28 @@ class AppColorsThemeExt extends ThemeExtension<AppColorsThemeExt> {
   final Color teal600;
   final Color rose;
   final Color lime;
+  final Color appBarBackground;
+  final Color appBarForeground;
+  final Color bottomSheetBarrier;
+  final Color link;
+  final Color border;
+  final Color avatarSurface;
+  final Color solidPrimary;
+  final Color input;
+  final Color meChatBubble;
+  final Color contactChatBubble;
+  final Color meChatBubbleText;
+  final Color contactChatBubbleText;
+  final Color overlay;
+  final Color surface;
+  final Color solidNeutralBlack;
+  final Color solidNeutralWhite;
+  final Color primarySolid;
+  final Color toastSurface;
+  final Color toastSuccess;
+  final Color toastError;
+  final Color toastWarning;
+  final Color toastIcon;
 
   /// Light theme colors
   static AppColorsThemeExt get light => const AppColorsThemeExt(
@@ -141,7 +97,7 @@ class AppColorsThemeExt extends ThemeExtension<AppColorsThemeExt> {
     tertiary: LightAppColors.tertiary,
     neutral: LightAppColors.neutral,
     neutralVariant: LightAppColors.neutralVariant,
-    primaryBackground: LightAppColors.primaryBackground,
+    primaryForeground: LightAppColors.primaryForeground,
     secondaryForeground: LightAppColors.secondaryForeground,
     mutedForeground: LightAppColors.mutedForeground,
     baseMuted: LightAppColors.baseMuted,
@@ -155,6 +111,28 @@ class AppColorsThemeExt extends ThemeExtension<AppColorsThemeExt> {
     teal600: LightAppColors.teal600,
     rose: LightAppColors.rose,
     lime: LightAppColors.lime,
+    appBarBackground: LightAppColors.appBarBackground,
+    appBarForeground: LightAppColors.appBarForeground,
+    bottomSheetBarrier: LightAppColors.bottomSheetBarrier,
+    link: LightAppColors.link,
+    border: LightAppColors.border,
+    avatarSurface: LightAppColors.avatarSurface,
+    solidPrimary: LightAppColors.solidPrimary,
+    input: LightAppColors.input,
+    meChatBubble: LightAppColors.meChatBubble,
+    contactChatBubble: LightAppColors.contactChatBubble,
+    meChatBubbleText: LightAppColors.meChatBubbleText,
+    contactChatBubbleText: LightAppColors.contactChatBubbleText,
+    overlay: LightAppColors.overlay,
+    surface: LightAppColors.surface,
+    solidNeutralBlack: LightAppColors.solidNeutralBlack,
+    solidNeutralWhite: LightAppColors.solidNeutralWhite,
+    primarySolid: LightAppColors.primarySolid,
+    toastSurface: LightAppColors.toastSurface,
+    toastSuccess: LightAppColors.toastSuccess,
+    toastError: LightAppColors.toastError,
+    toastWarning: LightAppColors.toastWarning,
+    toastIcon: LightAppColors.toastIcon,
   );
 
   /// Dark theme colors
@@ -164,7 +142,7 @@ class AppColorsThemeExt extends ThemeExtension<AppColorsThemeExt> {
     tertiary: DarkAppColors.tertiary,
     neutral: DarkAppColors.neutral,
     neutralVariant: DarkAppColors.neutralVariant,
-    primaryBackground: DarkAppColors.primaryBackground,
+    primaryForeground: DarkAppColors.primaryForeground,
     secondaryForeground: DarkAppColors.secondaryForeground,
     mutedForeground: DarkAppColors.mutedForeground,
     baseMuted: DarkAppColors.baseMuted,
@@ -178,6 +156,28 @@ class AppColorsThemeExt extends ThemeExtension<AppColorsThemeExt> {
     teal600: DarkAppColors.teal600,
     rose: DarkAppColors.rose,
     lime: DarkAppColors.lime,
+    appBarBackground: DarkAppColors.appBarBackground,
+    appBarForeground: DarkAppColors.appBarForeground,
+    bottomSheetBarrier: DarkAppColors.bottomSheetBarrier,
+    link: DarkAppColors.link,
+    border: DarkAppColors.border,
+    avatarSurface: DarkAppColors.avatarSurface,
+    solidPrimary: DarkAppColors.solidPrimary,
+    input: DarkAppColors.input,
+    meChatBubble: DarkAppColors.meChatBubble,
+    contactChatBubble: DarkAppColors.contactChatBubble,
+    meChatBubbleText: DarkAppColors.meChatBubbleText,
+    contactChatBubbleText: DarkAppColors.contactChatBubbleText,
+    overlay: DarkAppColors.overlay,
+    surface: DarkAppColors.surface,
+    solidNeutralBlack: DarkAppColors.solidNeutralBlack,
+    solidNeutralWhite: DarkAppColors.solidNeutralWhite,
+    primarySolid: DarkAppColors.primarySolid,
+    toastSurface: DarkAppColors.toastSurface,
+    toastSuccess: DarkAppColors.toastSuccess,
+    toastError: DarkAppColors.toastError,
+    toastWarning: DarkAppColors.toastWarning,
+    toastIcon: DarkAppColors.toastIcon,
   );
 
   @override
@@ -187,7 +187,7 @@ class AppColorsThemeExt extends ThemeExtension<AppColorsThemeExt> {
     Color? tertiary,
     Color? neutral,
     Color? neutralVariant,
-    Color? primaryBackground,
+    Color? primaryForeground,
     Color? secondaryForeground,
     Color? mutedForeground,
     Color? baseMuted,
@@ -201,6 +201,28 @@ class AppColorsThemeExt extends ThemeExtension<AppColorsThemeExt> {
     Color? teal600,
     Color? rose,
     Color? lime,
+    Color? appBarBackground,
+    Color? appBarForeground,
+    Color? bottomSheetBarrier,
+    Color? link,
+    Color? border,
+    Color? avatarSurface,
+    Color? solidPrimary,
+    Color? input,
+    Color? meChatBubble,
+    Color? contactChatBubble,
+    Color? meChatBubbleText,
+    Color? contactChatBubbleText,
+    Color? overlay,
+    Color? surface,
+    Color? solidNeutralBlack,
+    Color? solidNeutralWhite,
+    Color? primarySolid,
+    Color? toastSurface,
+    Color? toastSuccess,
+    Color? toastError,
+    Color? toastWarning,
+    Color? toastIcon,
   }) {
     return AppColorsThemeExt(
       primary: primary ?? this.primary,
@@ -208,7 +230,7 @@ class AppColorsThemeExt extends ThemeExtension<AppColorsThemeExt> {
       tertiary: tertiary ?? this.tertiary,
       neutral: neutral ?? this.neutral,
       neutralVariant: neutralVariant ?? this.neutralVariant,
-      primaryBackground: primaryBackground ?? this.primaryBackground,
+      primaryForeground: primaryForeground ?? this.primaryForeground,
       secondaryForeground: secondaryForeground ?? this.secondaryForeground,
       mutedForeground: mutedForeground ?? this.mutedForeground,
       baseMuted: baseMuted ?? this.baseMuted,
@@ -222,14 +244,33 @@ class AppColorsThemeExt extends ThemeExtension<AppColorsThemeExt> {
       teal600: teal600 ?? this.teal600,
       rose: rose ?? this.rose,
       lime: lime ?? this.lime,
+      appBarBackground: appBarBackground ?? this.appBarBackground,
+      appBarForeground: appBarForeground ?? this.appBarForeground,
+      bottomSheetBarrier: bottomSheetBarrier ?? this.bottomSheetBarrier,
+      link: link ?? this.link,
+      border: border ?? this.border,
+      avatarSurface: avatarSurface ?? this.avatarSurface,
+      solidPrimary: solidPrimary ?? this.solidPrimary,
+      input: input ?? this.input,
+      meChatBubble: meChatBubble ?? this.meChatBubble,
+      contactChatBubble: contactChatBubble ?? this.contactChatBubble,
+      meChatBubbleText: meChatBubbleText ?? this.meChatBubbleText,
+      contactChatBubbleText: contactChatBubbleText ?? this.contactChatBubbleText,
+      overlay: overlay ?? this.overlay,
+      surface: surface ?? this.surface,
+      solidNeutralBlack: solidNeutralBlack ?? this.solidNeutralBlack,
+      solidNeutralWhite: solidNeutralWhite ?? this.solidNeutralWhite,
+      primarySolid: primarySolid ?? this.primarySolid,
+      toastSurface: toastSurface ?? this.toastSurface,
+      toastSuccess: toastSuccess ?? this.toastSuccess,
+      toastError: toastError ?? this.toastError,
+      toastWarning: toastWarning ?? this.toastWarning,
+      toastIcon: toastIcon ?? this.toastIcon,
     );
   }
 
   @override
-  AppColorsThemeExt lerp(
-    covariant AppColorsThemeExt? other,
-    double t,
-  ) {
+  AppColorsThemeExt lerp(covariant AppColorsThemeExt? other, double t) {
     if (other == null) return this;
     return AppColorsThemeExt(
       primary: Color.lerp(primary, other.primary, t)!,
@@ -237,14 +278,21 @@ class AppColorsThemeExt extends ThemeExtension<AppColorsThemeExt> {
       tertiary: Color.lerp(tertiary, other.tertiary, t)!,
       neutral: Color.lerp(neutral, other.neutral, t)!,
       neutralVariant: Color.lerp(neutralVariant, other.neutralVariant, t)!,
-      primaryBackground:
-          Color.lerp(primaryBackground, other.primaryBackground, t)!,
+      primaryForeground: Color.lerp(primaryForeground, other.primaryForeground, t)!,
       secondaryForeground:
-          Color.lerp(secondaryForeground, other.secondaryForeground, t)!,
+          Color.lerp(
+            secondaryForeground,
+            other.secondaryForeground,
+            t,
+          )!,
       mutedForeground: Color.lerp(mutedForeground, other.mutedForeground, t)!,
       baseMuted: Color.lerp(baseMuted, other.baseMuted, t)!,
       textDefaultSecondary:
-          Color.lerp(textDefaultSecondary, other.textDefaultSecondary, t)!,
+          Color.lerp(
+            textDefaultSecondary,
+            other.textDefaultSecondary,
+            t,
+          )!,
       success: Color.lerp(success, other.success, t)!,
       destructive: Color.lerp(destructive, other.destructive, t)!,
       warning: Color.lerp(warning, other.warning, t)!,
@@ -254,6 +302,28 @@ class AppColorsThemeExt extends ThemeExtension<AppColorsThemeExt> {
       teal600: Color.lerp(teal600, other.teal600, t)!,
       rose: Color.lerp(rose, other.rose, t)!,
       lime: Color.lerp(lime, other.lime, t)!,
+      appBarBackground: Color.lerp(appBarBackground, other.appBarBackground, t)!,
+      appBarForeground: Color.lerp(appBarForeground, other.appBarForeground, t)!,
+      bottomSheetBarrier: Color.lerp(bottomSheetBarrier, other.bottomSheetBarrier, t)!,
+      link: Color.lerp(link, other.link, t)!,
+      border: Color.lerp(border, other.border, t)!,
+      avatarSurface: Color.lerp(avatarSurface, other.avatarSurface, t)!,
+      solidPrimary: Color.lerp(solidPrimary, other.solidPrimary, t)!,
+      input: Color.lerp(input, other.input, t)!,
+      meChatBubble: Color.lerp(meChatBubble, other.meChatBubble, t)!,
+      contactChatBubble: Color.lerp(contactChatBubble, other.contactChatBubble, t)!,
+      meChatBubbleText: Color.lerp(meChatBubbleText, other.meChatBubbleText, t)!,
+      contactChatBubbleText: Color.lerp(contactChatBubbleText, other.contactChatBubbleText, t)!,
+      overlay: Color.lerp(overlay, other.overlay, t)!,
+      surface: Color.lerp(surface, other.surface, t)!,
+      solidNeutralBlack: Color.lerp(solidNeutralBlack, other.solidNeutralBlack, t)!,
+      solidNeutralWhite: Color.lerp(solidNeutralWhite, other.solidNeutralWhite, t)!,
+      primarySolid: Color.lerp(primarySolid, other.primarySolid, t)!,
+      toastSurface: Color.lerp(toastSurface, other.toastSurface, t)!,
+      toastSuccess: Color.lerp(toastSuccess, other.toastSuccess, t)!,
+      toastError: Color.lerp(toastError, other.toastError, t)!,
+      toastWarning: Color.lerp(toastWarning, other.toastWarning, t)!,
+      toastIcon: Color.lerp(toastIcon, other.toastIcon, t)!,
     );
   }
 }

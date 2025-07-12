@@ -1,91 +1,99 @@
 // ignore_for_file: avoid_redundant_argument_values
-
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:logging/logging.dart';
+import 'package:path/path.dart' as path;
+import 'package:whitenoise/config/extensions/toast_extension.dart';
+import 'package:whitenoise/config/providers/active_account_provider.dart';
 import 'package:whitenoise/config/providers/auth_provider.dart';
 import 'package:whitenoise/config/providers/contacts_provider.dart';
-import 'package:whitenoise/src/rust/api.dart';
+import 'package:whitenoise/routing/router_provider.dart';
+import 'package:whitenoise/src/rust/api/accounts.dart';
+import 'package:whitenoise/src/rust/api/utils.dart';
 
 class AccountState {
-  final Account? account;
-  final Metadata? metadata;
+  final MetadataData? metadata;
   final String? pubkey;
   final Map<String, AccountData>? accounts;
   final bool isLoading;
   final String? error;
+  final String? selectedImagePath;
 
   const AccountState({
-    this.account,
     this.metadata,
     this.pubkey,
     this.accounts,
     this.isLoading = false,
     this.error,
+    this.selectedImagePath,
   });
 
   AccountState copyWith({
-    Account? account,
-    Metadata? metadata,
+    MetadataData? metadata,
     String? pubkey,
     Map<String, AccountData>? accounts,
     bool? isLoading,
     String? error,
+    String? selectedImagePath,
+    bool clearSelectedImagePath = false,
   }) => AccountState(
-    account: account ?? this.account,
     metadata: metadata ?? this.metadata,
     pubkey: pubkey ?? this.pubkey,
     accounts: accounts ?? this.accounts,
     isLoading: isLoading ?? this.isLoading,
     error: error ?? this.error,
+    selectedImagePath:
+        clearSelectedImagePath ? null : (selectedImagePath ?? this.selectedImagePath),
   );
 }
 
 class AccountNotifier extends Notifier<AccountState> {
+  final _logger = Logger('AccountNotifier');
+
   @override
   AccountState build() => const AccountState();
 
   // Load the currently active account
   Future<void> loadAccountData() async {
     state = state.copyWith(isLoading: true, error: null);
-    final wn = ref.read(authProvider).whitenoise;
-    if (wn == null) {
+
+    if (!ref.read(authProvider).isAuthenticated) {
       state = state.copyWith(
-        error: 'Whitenoise instance not found',
+        error: 'Not authenticated',
         isLoading: false,
       );
       return;
     }
 
     try {
-      final acct = await getActiveAccount(whitenoise: wn);
-      if (acct == null) {
+      // Get the active account data from active account provider
+      final activeAccountData =
+          await ref.read(activeAccountProvider.notifier).getActiveAccountData();
+
+      if (activeAccountData == null) {
         state = state.copyWith(error: 'No active account found');
       } else {
-        final accountData = await getAccountData(account: acct);
-
         final publicKey = await publicKeyFromString(
-          publicKeyString: accountData.pubkey,
+          publicKeyString: activeAccountData.pubkey,
         );
-        final metadata = await fetchMetadata(
-          whitenoise: wn,
-          pubkey: publicKey,
-        );
+        final metadata = await fetchMetadata(pubkey: publicKey);
 
+        // We need to create a dummy Account object since we only have AccountData
+        // This is a limitation of the current API design
         state = state.copyWith(
-          account: acct,
           metadata: metadata,
-          pubkey: accountData.pubkey,
+          pubkey: activeAccountData.pubkey,
         );
 
         // Automatically load contacts for the active account
         try {
-          await ref.read(contactsProvider.notifier).loadContacts(data.pubkey);
+          await ref.read(contactsProvider.notifier).loadContacts(activeAccountData.pubkey);
         } catch (e) {
-          debugPrint('Failed to load contacts: $e');
+          _logger.severe('Failed to load contacts: $e');
         }
       }
     } catch (e, st) {
-      debugPrintStack(label: 'loadAccountData', stackTrace: st);
+      _logger.severe('loadAccountData', e, st);
       state = state.copyWith(error: e.toString());
     } finally {
       state = state.copyWith(isLoading: false);
@@ -93,16 +101,17 @@ class AccountNotifier extends Notifier<AccountState> {
   }
 
   // Fetch and store all accounts
-  Future<Map<String, AccountData>?> listAccounts() async {
-    final wn = ref.read(authProvider).whitenoise;
-    if (wn == null) return null;
-
+  Future<List<AccountData>?> listAccounts() async {
     try {
-      final wnData = await getWhitenoiseData(whitenoise: wn);
-      state = state.copyWith(accounts: wnData.accounts);
-      return wnData.accounts;
+      final accountsList = await fetchAccounts();
+      final accountsMap = <String, AccountData>{};
+      for (final account in accountsList) {
+        accountsMap[account.pubkey] = account;
+      }
+      state = state.copyWith(accounts: accountsMap);
+      return accountsList;
     } catch (e, st) {
-      debugPrintStack(label: 'listAccounts', stackTrace: st);
+      _logger.severe('listAccounts', e, st);
       state = state.copyWith(error: e.toString());
       return null;
     }
@@ -110,26 +119,19 @@ class AccountNotifier extends Notifier<AccountState> {
 
   // Set a specific account as active
   Future<void> setActiveAccount(Account account) async {
-    final wn = ref.read(authProvider).whitenoise;
-    if (wn == null) return;
-
     state = state.copyWith(isLoading: true);
     try {
-      final updated = await updateActiveAccount(
-        whitenoise: wn,
-        account: account,
-      );
-      final data = await getAccountData(account: updated);
-      state = state.copyWith(account: updated, pubkey: data.pubkey);
+      final data = await convertAccountToData(account: account);
+      state = state.copyWith(pubkey: data.pubkey);
 
       // Automatically load contacts for the newly active account
       try {
         await ref.read(contactsProvider.notifier).loadContacts(data.pubkey);
       } catch (e) {
-        debugPrint('Failed to load contacts: $e');
+        _logger.severe('Failed to load contacts: $e');
       }
     } catch (e, st) {
-      debugPrintStack(label: 'setActiveAccount', stackTrace: st);
+      _logger.severe('setActiveAccount', e, st);
       state = state.copyWith(error: e.toString());
     } finally {
       state = state.copyWith(isLoading: false);
@@ -144,36 +146,96 @@ class AccountNotifier extends Notifier<AccountState> {
   }
 
   // Update metadata for the current account
-  Future<void> updateAccountMetadata(String displayName, String bio) async {
-    final wn = ref.read(authProvider).whitenoise;
-    final acct = state.account;
-    if (wn == null || acct == null) return;
+  Future<void> updateAccountMetadata(WidgetRef ref, String displayName, String bio) async {
+    if (displayName.isEmpty) {
+      ref.showRawErrorToast('Please enter a name');
+      return;
+    }
 
-    state = state.copyWith(isLoading: true);
+    String? profilePictureUrl;
+    state = state.copyWith(isLoading: true, error: null);
+    final profilePicPath = state.selectedImagePath;
+
     try {
       final accountMetadata = state.metadata;
-      if (accountMetadata != null) {
-        if (displayName.isNotEmpty &&
-            displayName != accountMetadata.displayName) {
-          accountMetadata.displayName = displayName;
-          //TODO: impl bio for Metadata
-          // accountMetadata.bio = bio;
+      final pubkey = state.pubkey;
 
-          final updatedMetadata = accountMetadata;
-          await updateMetadata(
-            whitenoise: wn,
-            metadata: updatedMetadata,
-            account: acct,
+      if (accountMetadata != null && pubkey != null) {
+        final isDisplayNameChanged =
+            displayName.isNotEmpty && displayName != accountMetadata.displayName;
+        final isBioProvided = bio.isNotEmpty;
+
+        // Skipping update if there's nothing to change
+        if (!isDisplayNameChanged && !isBioProvided && profilePicPath == null) {
+          ref.read(routerProvider).go('/chats');
+          return;
+        }
+
+        if (profilePicPath != null) {
+          // Get file extension to determine image type
+          final fileExtension = path.extension(profilePicPath);
+          final imageType = await imageTypeFromExtension(extension_: fileExtension);
+
+          final activeAccount =
+              await ref.read(activeAccountProvider.notifier).getActiveAccountData();
+          if (activeAccount == null) {
+            ref.showRawErrorToast('No active account found');
+            return;
+          }
+
+          final serverUrl = await getDefaultBlossomServerUrl();
+          final publicKey = await publicKeyFromString(publicKeyString: activeAccount.pubkey);
+
+          profilePictureUrl = await uploadProfilePicture(
+            pubkey: publicKey,
+            serverUrl: serverUrl,
+            filePath: profilePicPath,
+            imageType: imageType,
           );
         }
-      } else {
-        throw Exception('No metadata found');
+
+        if (isDisplayNameChanged) {
+          accountMetadata.displayName = displayName;
+        }
+
+        if (isBioProvided) {
+          accountMetadata.about = bio;
+        }
+
+        if (profilePictureUrl != null) {
+          accountMetadata.picture = profilePictureUrl;
+        }
+
+        final publicKey = await publicKeyFromString(publicKeyString: pubkey);
+
+        await updateMetadata(
+          metadata: accountMetadata,
+          pubkey: publicKey,
+        );
+        ref.read(routerProvider).go('/chats');
       }
     } catch (e, st) {
-      debugPrintStack(label: 'updateMetadata', stackTrace: st);
+      _logger.severe('updateMetadata', e, st);
       state = state.copyWith(error: e.toString());
     } finally {
-      state = state.copyWith(isLoading: false);
+      state = state.copyWith(isLoading: false, clearSelectedImagePath: true);
+    }
+  }
+
+  Future<void> pickProfileImage(WidgetRef ref) async {
+    try {
+      final XFile? image = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 85,
+      );
+
+      if (image != null) {
+        state = state.copyWith(selectedImagePath: image.path);
+      }
+    } catch (e) {
+      ref.showRawErrorToast('Failed to pick image: $e');
     }
   }
 }

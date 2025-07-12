@@ -4,8 +4,11 @@ import 'package:flutter_svg/svg.dart';
 import 'package:gap/gap.dart';
 import 'package:supa_carbon_icons/supa_carbon_icons.dart';
 import 'package:whitenoise/domain/models/contact_model.dart';
+import 'package:whitenoise/src/rust/api/accounts.dart';
+import 'package:whitenoise/src/rust/api/utils.dart';
 import 'package:whitenoise/ui/core/themes/assets.dart';
-import 'package:whitenoise/ui/core/themes/colors.dart';
+import 'package:whitenoise/ui/core/themes/src/extensions.dart';
+import 'package:whitenoise/utils/string_extensions.dart';
 
 class ContactListTile extends StatelessWidget {
   final ContactModel contact;
@@ -27,6 +30,16 @@ class ContactListTile extends StatelessWidget {
     super.key,
   });
 
+  Future<String> _getNpub(String publicKeyHex) async {
+    try {
+      final publicKey = await publicKeyFromString(publicKeyString: publicKeyHex);
+      final npub = await exportAccountNpub(pubkey: publicKey);
+      return npub.formatPublicKey();
+    } catch (e) {
+      return '';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final contactTile = GestureDetector(
@@ -41,7 +54,7 @@ class ContactListTile extends StatelessWidget {
                 width: 56.w,
                 height: 56.w,
                 decoration: BoxDecoration(
-                  color: Colors.orange,
+                  color: context.colors.warning,
                   borderRadius: BorderRadius.circular(30.r),
                 ),
                 child:
@@ -56,7 +69,7 @@ class ContactListTile extends StatelessWidget {
                                 child: Text(
                                   contact.avatarLetter,
                                   style: TextStyle(
-                                    color: AppColors.white,
+                                    color: context.colors.neutral,
                                     fontSize: 20.sp,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -67,7 +80,7 @@ class ContactListTile extends StatelessWidget {
                           child: Text(
                             contact.avatarLetter,
                             style: TextStyle(
-                              color: AppColors.white,
+                              color: context.colors.neutral,
                               fontSize: 20.sp,
                               fontWeight: FontWeight.bold,
                             ),
@@ -86,7 +99,7 @@ class ContactListTile extends StatelessWidget {
                         child: Text(
                           contact.displayNameOrName,
                           style: TextStyle(
-                            color: AppColors.glitch900,
+                            color: context.colors.secondaryForeground,
                             fontSize: 18.sp,
                             fontWeight: FontWeight.w500,
                           ),
@@ -102,76 +115,22 @@ class ContactListTile extends StatelessWidget {
                         ),
                     ],
                   ),
-                  // Show display name if different from name
-                  if (contact.displayName != null &&
-                      contact.displayName!.isNotEmpty &&
-                      contact.displayName != contact.name) ...[
-                    Gap(2.h),
-                    Text(
-                      contact.displayName!,
-                      style: TextStyle(
-                        color: AppColors.glitch700,
-                        fontSize: 14.sp,
-                        fontStyle: FontStyle.italic,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                  // Show about if available
-                  if (contact.about != null && contact.about!.isNotEmpty) ...[
-                    Gap(2.h),
-                    Text(
-                      contact.about!.length > 60
-                          ? '${contact.about!.substring(0, 60)}...'
-                          : contact.about!,
-                      style: TextStyle(
-                        color: AppColors.glitch600,
-                        fontSize: 12.sp,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                  // Show NIP-05 if available
-                  if (contact.nip05 != null && contact.nip05!.isNotEmpty) ...[
-                    Gap(2.h),
-                    Text(
-                      contact.nip05!,
-                      style: TextStyle(
-                        color: AppColors.glitch500,
-                        fontSize: 12.sp,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                  // Show website if available
-                  if (contact.website != null &&
-                      contact.website!.isNotEmpty) ...[
-                    Gap(2.h),
-                    Text(
-                      contact.website!,
-                      style: TextStyle(
-                        color: AppColors.glitch500,
-                        fontSize: 11.sp,
-                        decoration: TextDecoration.underline,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                  // Show lightning address if available
-                  if (contact.lud16 != null && contact.lud16!.isNotEmpty) ...[
-                    Gap(2.h),
-                    Text(
-                      '⚡ ${contact.lud16!}',
-                      style: TextStyle(
-                        color: AppColors.glitch500,
-                        fontSize: 11.sp,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                  // Public key display removed per user request
+                  Gap(2.h),
+                  FutureBuilder<String>(
+                    future: _getNpub(contact.publicKey),
+                    builder: (context, snapshot) {
+                      if (snapshot.hasData) {
+                        return Text(
+                          snapshot.data!,
+                          style: TextStyle(
+                            color: context.colors.mutedForeground,
+                            fontSize: 12.sp,
+                          ),
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
                 ],
               ),
             ),
@@ -182,16 +141,12 @@ class ContactListTile extends StatelessWidget {
                 height: 18.w,
                 decoration: BoxDecoration(
                   border: Border.all(
-                    color:
-                        isSelected ? AppColors.glitch950 : AppColors.glitch200,
+                    color: isSelected ? context.colors.primary : context.colors.baseMuted,
                     width: 1.5.w,
                   ),
-                  color: isSelected ? AppColors.glitch950 : Colors.transparent,
+                  color: isSelected ? context.colors.primary : Colors.transparent,
                 ),
-                child:
-                    isSelected
-                        ? Icon(Icons.check, size: 12.w, color: Colors.white)
-                        : null,
+                child: isSelected ? Icon(Icons.check, size: 12.w, color: Colors.white) : null,
               ),
             ] else if (showExpansionArrow) ...[
               Gap(16.w),
@@ -238,11 +193,7 @@ class ContactListTile extends StatelessWidget {
           alignment: Alignment.centerRight,
           padding: EdgeInsets.only(right: 24.w),
           color: Colors.red,
-          child: Icon(
-            CarbonIcons.trash_can,
-            color: Colors.white,
-            size: 24.w,
-          ),
+          child: Icon(CarbonIcons.trash_can, color: Colors.white, size: 24.w),
         ),
         child: contactTile,
       );

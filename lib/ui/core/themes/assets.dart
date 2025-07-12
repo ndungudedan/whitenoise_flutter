@@ -22,6 +22,22 @@ class AssetsPaths {
   static const String icDisconnected = '$_svgsDir/ic_disconnected.svg';
   static const String icPaste = '$_svgsDir/ic_paste.svg';
   static const String icScan = '$_svgsDir/ic_scan.svg';
+  static const String icWhiteNoiseSvg = '$_svgsDir/ic_whitenoise.svg';
+  static const String icNewChat = '$_svgsDir/ic_new_chat.svg';
+  static const String icStartChatting = '$_svgsDir/ic_start_chatting.svg';
+  static const String icArrowRight = '$_svgsDir/ic_arrow_right.svg';
+  static const String icChevronLeft = '$_svgsDir/ic_chevron_left.svg';
+  static const String icBitcoin = '$_svgsDir/ic_bitcoin.svg';
+  static const String icFeedback = '$_svgsDir/ic_feedback.svg';
+  static const String icErrorFilled = '$_svgsDir/ic_error_filled.svg';
+  static const String icInfoFilled = '$_svgsDir/ic_info_filled.svg';
+  static const String icWarningFilled = '$_svgsDir/ic_warning_filled.svg';
+  static const String icSuccessFilled = '$_svgsDir/ic_success_filled.svg';
+  static const String icNotification = '$_svgsDir/ic_notification.svg';
+  static const String icMutedNotification = '$_svgsDir/ic_mute_notfication.svg';
+  static const String icAddUser = '$_svgsDir/ic_add_user.svg';
+  static const String icRemoveUser = '$_svgsDir/ic_remove_user.svg';
+  static const String icChatInvite = '$_svgsDir/ic_add_chat.svg';
 
   //PNGS
   static const String icImage = '$_pngsDir/ic_image.png';
@@ -34,4 +50,11 @@ class AssetsPaths {
   static const String purpleWoman = '$_pngsDir/purple_woman.png';
   static const String greenBird = '$_pngsDir/green_bird.png';
   static const String hands = '$_pngsDir/hands.png';
+  static const String icAddNewChat = '$_pngsDir/ic_add_chat.png';
+  static const String icNotificationMuted = '$_pngsDir/ic_notification_muted.png';
+  static const String icCheckmarkSolid = '$_pngsDir/ic_checkmark_solid.png';
+  static const String icCheckmarkDashed = '$_pngsDir/ic_checkmark_dashed.png';
+  static const String icCheckmarkFilled = '$_pngsDir/ic_checkmark_filled.png';
+  static const String login = '$_pngsDir/login.png';
+  static const String icAvatar = '$_pngsDir/ic_avatar.png';
 }

@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
-import 'package:whitenoise/ui/core/themes/colors.dart';
+
+import '../themes/src/extensions.dart';
 
 class CustomTextField extends StatelessWidget {
   const CustomTextField({
     super.key,
     this.textController,
+    this.focusNode,
     this.padding,
     this.contentPadding,
-    this.autofocus = true,
+    this.autofocus = false,
     this.hintText,
     this.obscureText = false,
     this.label,
@@ -17,6 +19,7 @@ class CustomTextField extends StatelessWidget {
   });
 
   final TextEditingController? textController;
+  final FocusNode? focusNode;
   final EdgeInsetsGeometry? padding;
   final EdgeInsetsGeometry? contentPadding;
   final bool autofocus;
@@ -37,7 +40,7 @@ class CustomTextField extends StatelessWidget {
             Text(
               label,
               style: TextStyle(
-                color: AppColors.glitch900,
+                color: context.colors.secondaryForeground,
                 fontSize: 14.sp,
                 fontWeight: FontWeight.w500,
               ),
@@ -48,30 +51,30 @@ class CustomTextField extends StatelessWidget {
             height: 40.h,
             child: TextField(
               controller: textController,
+              focusNode: focusNode,
               autofocus: autofocus,
               obscureText: obscureText,
               readOnly: readOnly,
               decoration: InputDecoration(
                 hintText: hintText,
                 hintStyle: TextStyle(
-                  color: AppColors.glitch600,
+                  color: context.colors.mutedForeground,
                   fontSize: 14.sp,
                 ),
-                border: const OutlineInputBorder(
-                  borderSide: BorderSide(color: AppColors.glitch200),
+                border: OutlineInputBorder(
+                  borderSide: BorderSide(color: context.colors.baseMuted),
                   borderRadius: BorderRadius.zero,
                 ),
-                enabledBorder: const OutlineInputBorder(
-                  borderSide: BorderSide(color: AppColors.glitch200),
+                enabledBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: context.colors.baseMuted),
                   borderRadius: BorderRadius.zero,
                 ),
-                focusedBorder: const OutlineInputBorder(
-                  borderSide: BorderSide(color: AppColors.glitch200),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: context.colors.baseMuted),
                   borderRadius: BorderRadius.zero,
                 ),
                 contentPadding:
-                    contentPadding ??
-                    EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+                    contentPadding ?? EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
               ),
             ),
           ),

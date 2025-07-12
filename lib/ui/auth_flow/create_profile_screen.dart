@@ -1,51 +1,44 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_svg/svg.dart';
 import 'package:gap/gap.dart';
-import 'package:go_router/go_router.dart';
+import 'package:supa_carbon_icons/supa_carbon_icons.dart';
 import 'package:whitenoise/config/providers/account_provider.dart';
 import 'package:whitenoise/ui/core/themes/assets.dart';
-import 'package:whitenoise/ui/core/themes/colors.dart';
-import 'package:whitenoise/ui/core/ui/custom_filled_button.dart';
+import 'package:whitenoise/ui/core/themes/src/extensions.dart';
+import 'package:whitenoise/ui/core/ui/app_button.dart';
+import 'package:whitenoise/ui/core/ui/app_text_form_field.dart';
 
 class CreateProfileScreen extends ConsumerStatefulWidget {
   const CreateProfileScreen({super.key});
 
   @override
-  ConsumerState<CreateProfileScreen> createState() =>
-      _CreateProfileScreenState();
+  ConsumerState<CreateProfileScreen> createState() => _CreateProfileScreenState();
 }
 
 class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _bioController = TextEditingController();
 
-  Future<void> _onFinishPressed() async {
-    final username = _usernameController.text.trim();
-    final bio = _bioController.text.trim();
-    // TODO: authProvider
-    await ref
-        .read(accountProvider.notifier)
-        .updateAccountMetadata(username, bio);
-    if (username.isNotEmpty) {
-      if (!mounted) return;
-      context.go('/chats');
-    } else {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a name')),
-      );
-    }
-  }
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // TODO: optimising this in the next PR - unify auth and acct, single provider for current account.
-      await ref.read(accountProvider.notifier).loadAccountData();
-      _usernameController.text =
-          ref.read(accountProvider).metadata?.displayName ?? '';
+      // Try to load existing metadata first
+      final currentMetadata = ref.read(accountProvider).metadata;
+      if (currentMetadata?.displayName != null && currentMetadata!.displayName!.isNotEmpty) {
+        _usernameController.text = currentMetadata.displayName!;
+      } else {
+        // If no metadata, try to load it
+        await ref.read(accountProvider.notifier).loadAccountData();
+        final newMetadata = ref.read(accountProvider).metadata;
+        if (newMetadata?.displayName != null && newMetadata!.displayName!.isNotEmpty) {
+          _usernameController.text = newMetadata.displayName!;
+        }
+      }
     });
   }
 
@@ -58,8 +51,17 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Listen to account provider changes and update username when metadata is loaded
+    ref.listen<AccountState>(accountProvider, (previous, next) {
+      if (next.metadata?.displayName != null &&
+          next.metadata!.displayName!.isNotEmpty &&
+          _usernameController.text.isEmpty) {
+        _usernameController.text = next.metadata!.displayName!;
+      }
+    });
+
     return Scaffold(
-      backgroundColor: AppColors.white,
+      backgroundColor: context.colors.neutral,
       resizeToAvoidBottomInset: true,
       body: SafeArea(
         child: SingleChildScrollView(
@@ -67,52 +69,77 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
           child: Column(
             children: [
               Text(
-                'Setup Your Profile',
+                'Setup Profile',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 30.sp,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.glitch800,
+                  fontSize: 32.sp,
+                  fontWeight: FontWeight.w700,
+                  color: context.colors.mutedForeground,
                 ),
               ),
-              Gap(32.h),
+              Gap(48.h),
               Stack(
                 alignment: Alignment.bottomRight,
                 children: [
-                  CircleAvatar(
-                    radius: 50.r,
-                    backgroundImage: const AssetImage(
-                      AssetsPaths.avatarPlaceholder,
-                    ),
+                  ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: _usernameController,
+                    builder: (context, value, child) {
+                      final displayText = value.text.trim();
+                      final firstLetter =
+                          displayText.isNotEmpty ? displayText[0].toUpperCase() : '';
+                      return CircleAvatar(
+                        radius: 48.r,
+                        backgroundColor: context.colors.primarySolid,
+                        backgroundImage:
+                            ref.watch(accountProvider).selectedImagePath != null
+                                ? FileImage(File(ref.watch(accountProvider).selectedImagePath!))
+                                : null,
+                        child:
+                            ref.watch(accountProvider).selectedImagePath == null
+                                ? (firstLetter.isNotEmpty
+                                    ? Text(
+                                      firstLetter,
+                                      style: TextStyle(
+                                        fontSize: 32.sp,
+                                        fontWeight: FontWeight.w700,
+                                        color: context.colors.primaryForeground,
+                                      ),
+                                    )
+                                    : Icon(
+                                      CarbonIcons.user,
+                                      size: 32.sp,
+                                      color: context.colors.primaryForeground,
+                                    ))
+                                : null,
+                      );
+                    },
                   ),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: AppColors.glitch100,
-                        width: 1.w,
+                  GestureDetector(
+                    onTap: () => ref.read(accountProvider.notifier).pickProfileImage(ref),
+                    child: Container(
+                      width: 28.w,
+                      height: 28.w,
+                      padding: EdgeInsets.all(6.w),
+                      decoration: BoxDecoration(
+                        color: context.colors.mutedForeground,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: context.colors.secondary,
+                          width: 1.w,
+                        ),
                       ),
-                    ),
-                    padding: EdgeInsets.all(4.r),
-                    child: Icon(
-                      Icons.edit,
-                      size: 18.sp,
-                      color: AppColors.glitch800,
+                      child: SvgPicture.asset(
+                        AssetsPaths.icEdit,
+                        colorFilter: ColorFilter.mode(
+                          context.colors.primaryForeground,
+                          BlendMode.srcIn,
+                        ),
+                      ),
                     ),
                   ),
                 ],
               ),
-              Gap(12.h),
-              Text(
-                'Upload Avatar',
-                style: TextStyle(
-                  fontSize: 16.sp,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.glitch950,
-                ),
-              ),
-              Gap(32.h),
+              Gap(36.h),
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
@@ -120,47 +147,17 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 14.sp,
-                    color: Colors.black,
+                    color: context.colors.primary,
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
-              TextField(
+              Gap(10.h),
+              AppTextFormField(
+                hintText: 'Free Citizen',
+                obscureText: false,
                 controller: _usernameController,
-                decoration: InputDecoration(
-                  hintText: 'Satoshi Nakamoto',
-                  filled: true,
-                  fillColor: Colors.white,
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 12.w,
-                    vertical: 16.h,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.zero,
-                    borderSide: BorderSide(
-                      color: AppColors.glitch700,
-                      width: 1.w,
-                    ),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.zero,
-                    borderSide: BorderSide(
-                      color: AppColors.glitch700,
-                      width: 1.w,
-                    ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.zero,
-                    borderSide: BorderSide(
-                      color: AppColors.glitch700,
-                      width: 1.w,
-                    ),
-                  ),
-                ),
               ),
-
-              SizedBox(height: 24.h),
-
+              Gap(36.h),
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
@@ -168,56 +165,55 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 14.sp,
-                    color: Colors.black,
+                    color: context.colors.primary,
                   ),
                 ),
               ),
-              SizedBox(height: 8.h),
-              TextField(
+              Gap(8.h),
+              AppTextFormField(
+                hintText: 'Write something about yourself',
+                obscureText: false,
                 controller: _bioController,
                 maxLines: 3,
-                decoration: InputDecoration(
-                  hintText: 'A few words about you',
-                  filled: true,
-                  fillColor: Colors.white,
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 12.w,
-                    vertical: 12.h,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.zero,
-                    borderSide: BorderSide(
-                      color: AppColors.glitch700,
-                      width: 1.w,
-                    ),
-                  ),
-                  enabledBorder: const OutlineInputBorder(
-                    borderRadius: BorderRadius.zero,
-                    borderSide: BorderSide(
-                      color: AppColors.glitch700,
-                    ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.zero,
-                    borderSide: BorderSide(
-                      color: AppColors.glitch700,
-                      width: 1.w,
-                    ),
-                  ),
-                ),
+                minLines: 3,
+                keyboardType: TextInputType.multiline,
               ),
-
-              SizedBox(height: 32.h),
+              Gap(32.h),
             ],
           ),
         ),
       ),
-
       bottomNavigationBar: SafeArea(
         top: false,
-        child: CustomFilledButton(
-          onPressed: () async => await _onFinishPressed(),
-          title: 'Finish',
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: 24.w,
+          ).copyWith(bottom: 32.h),
+          child: Consumer(
+            builder: (context, ref, child) {
+              final accountState = ref.watch(accountProvider);
+              return accountState.isLoading
+                  ? SizedBox(
+                    height: 56.h,
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        color: context.colors.primary,
+                      ),
+                    ),
+                  )
+                  : AppFilledButton(
+                    onPressed:
+                        () => ref
+                            .read(accountProvider.notifier)
+                            .updateAccountMetadata(
+                              ref,
+                              _usernameController.text.trim(),
+                              _bioController.text.trim(),
+                            ),
+                    title: 'Finish',
+                  );
+            },
+          ),
         ),
       ),
     );

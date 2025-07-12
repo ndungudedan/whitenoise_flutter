@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_svg/svg.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 import 'package:whitenoise/config/providers/auth_provider.dart';
 import 'package:whitenoise/ui/core/themes/assets.dart';
-import 'package:whitenoise/ui/core/themes/colors.dart';
-import 'package:whitenoise/ui/core/ui/custom_filled_button.dart';
-import 'package:whitenoise/ui/core/ui/custom_text_button.dart';
+import 'package:whitenoise/ui/core/themes/src/app_theme.dart';
+import 'package:whitenoise/ui/core/ui/app_button.dart';
 
 class WelcomeScreen extends ConsumerStatefulWidget {
   const WelcomeScreen({super.key});
@@ -20,135 +19,87 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
   Future<void> _handleCreateAccount(BuildContext context) async {
     final authNotifier = ref.read(authProvider.notifier);
 
-    await authNotifier.initialize();
-    await authNotifier.createAccount();
+    // Start account creation in background without loading state
+    authNotifier.createAccountInBackground();
 
-    final authState = ref.read(authProvider);
-    if (authState.isAuthenticated && authState.error == null) {
-      if (!context.mounted) return;
-      context.go('/onboarding');
-    } else {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(authState.error ?? 'Unknown error')),
-      );
-    }
+    // Navigate immediately to onboarding
+    if (!context.mounted) return;
+    context.go('/onboarding');
   }
 
   @override
   Widget build(BuildContext context) {
-    final authState = ref.watch(authProvider);
+    ref.watch(authProvider);
 
     return Stack(
       children: [
         Scaffold(
-          backgroundColor: Colors.white,
-          body: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: EdgeInsets.only(
-                  top: MediaQuery.of(context).padding.top,
-                ),
-                child: SizedBox(
-                  height: 360.h,
-                  width: double.infinity,
-                  child: ShaderMask(
-                    shaderCallback: (Rect bounds) {
-                      return const LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.transparent,
-                          Colors.black,
-                          Colors.transparent,
-                        ],
-                        stops: [0.0, 0.5, 1.0],
-                      ).createShader(bounds);
-                    },
-                    blendMode: BlendMode.dstIn,
-                    child: Image.asset(
-                      AssetsPaths.loginSplash,
-                      fit: BoxFit.cover,
-                    ),
+          backgroundColor: context.colors.neutral,
+          body: SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 24.w),
+                  child: Column(
+                    children: [
+                      SvgPicture.asset(
+                        AssetsPaths.icWhiteNoiseSvg,
+                        width: 170.w,
+                        height: 130.h,
+                        colorFilter: ColorFilter.mode(
+                          context.colors.primary,
+                          BlendMode.srcIn,
+                        ),
+                      ),
+                      Gap(24.h),
+                      Text(
+                        'White Noise',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 48.sp,
+                          letterSpacing: -0.6.sp,
+                          color: context.colors.primary,
+                        ),
+                      ),
+                      Gap(6.h),
+                      Text(
+                        'Decentralized. Uncensorable.\nSecure Messaging. ',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w400,
+                          fontSize: 18.sp,
+                          letterSpacing: 0.1.sp,
+                          color: context.colors.mutedForeground,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-
-              const SizedBox(height: 32),
-
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: 24.w),
-                child: const Column(
-                  children: [
-                    Text(
-                      'Welcome to',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontFamily: 'Overused Grotesk',
-                        fontWeight: FontWeight.w400,
-                        fontSize: 34,
-                        height: 1.0,
-                        letterSpacing: -0.72,
-                        color: AppColors.glitch600,
-                      ),
-                    ),
-                    SizedBox(height: 10),
-                    Text(
-                      'White Noise',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontFamily: 'Overused Grotesk',
-                        fontWeight: FontWeight.w600,
-                        fontSize: 50,
-                        height: 1.0,
-                        letterSpacing: -1.02,
-                        color: AppColors.glitch950,
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      'Secure. Distributed. Uncensorable.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontFamily: 'Sans',
-                        fontWeight: FontWeight.w500,
-                        fontSize: 14,
-                        height: 1.0,
-                        letterSpacing: 0,
-                        color: AppColors.glitch950,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const Spacer(),
-            ],
+              ],
+            ),
           ),
-
           bottomNavigationBar: SafeArea(
             top: false,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CustomTextButton(
-                  onPressed: () => context.go('/login'),
-                  title: 'Login',
-                ),
-                Gap(16.h),
-                authState.isLoading
-                    ? const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 16),
-                      child: Center(
-                        child: CircularProgressIndicator(color: Colors.black),
-                      ),
-                    )
-                    : CustomFilledButton(
-                      onPressed: () => _handleCreateAccount(context),
-                      title: 'Sign Up',
-                    ),
-              ],
+            child: Padding(
+              padding: EdgeInsets.only(bottom: 32.h),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AppFilledButton(
+                    title: 'Login',
+                    visualState: AppButtonVisualState.secondary,
+                    onPressed: () => context.go('/login'),
+                  ),
+                  Gap(12.h),
+                  AppFilledButton(
+                    title: 'Sign Up',
+                    onPressed: () => _handleCreateAccount(context),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

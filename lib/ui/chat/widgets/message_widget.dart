@@ -1,14 +1,9 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
-import 'package:supa_carbon_icons/supa_carbon_icons.dart';
 import 'package:whitenoise/domain/models/message_model.dart';
-import 'package:whitenoise/ui/core/themes/colors.dart';
-
-import 'chat_audio_item.dart';
-import 'chat_reply_item.dart';
-import 'reaction/stacked_reactions.dart';
+import 'package:whitenoise/ui/chat/widgets/chat_bubble/bubble.dart';
+import 'package:whitenoise/ui/core/themes/src/extensions.dart';
 
 class MessageWidget extends StatelessWidget {
   final MessageModel message;
@@ -17,6 +12,7 @@ class MessageWidget extends StatelessWidget {
   final bool isSameSenderAsNext;
   final VoidCallback? onTap;
   final Function(String)? onReactionTap;
+  final Function(String)? onReplyTap;
 
   const MessageWidget({
     super.key,
@@ -26,96 +22,370 @@ class MessageWidget extends StatelessWidget {
     required this.isSameSenderAsNext,
     this.onTap,
     this.onReactionTap,
+    this.onReplyTap,
   });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Align(
-        alignment: message.isMe ? Alignment.centerRight : Alignment.centerLeft,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: 0.8.sw, minWidth: 0.3.sw),
-          child: Padding(
-            padding: EdgeInsets.only(
-              bottom: isSameSenderAsPrevious ? 1.w : 8.w,
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
+      child: Container(
+        margin: EdgeInsets.only(
+          bottom: isSameSenderAsPrevious ? 4.w : 12.w,
+        ),
+        child: ChatMessageBubble(
+          isSender: message.isMe,
+          color: message.isMe ? context.colors.meChatBubble : context.colors.contactChatBubble,
+          tail: !isSameSenderAsNext,
+          child: _buildMessageContent(context),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMessageContent(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Container(
+          constraints: BoxConstraints(
+            maxWidth: constraints.maxWidth,
+          ),
+          padding: EdgeInsets.only(right: message.isMe ? 8.w : 0, left: message.isMe ? 0 : 8.w),
+          child: Column(
+            crossAxisAlignment: message.isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isGroupMessage && !isSameSenderAsNext && !message.isMe) ...[
+                Text(
+                  message.sender.name,
+                  style: TextStyle(
+                    fontSize: 12.sp,
+                    fontWeight: FontWeight.w600,
+                    color: context.colors.mutedForeground,
+                  ),
+                ),
+                Gap(4.h),
+              ],
+              ReplyBox(
+                replyingTo: message.replyTo,
+                onTap: message.replyTo != null ? () => onReplyTap?.call(message.replyTo!.id) : null,
+              ),
+              _buildMessageWithTimestamp(
+                context,
+                constraints.maxWidth - 16.w,
+              ),
+
+              if (message.reactions.isNotEmpty) ...[
+                SizedBox(height: 4.h),
+                ReactionsRow(message: message, onReactionTap: onReactionTap, context: context),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMessageWithTimestamp(BuildContext context, double maxWidth) {
+    // Single source of truth for message text style
+    final textStyle = TextStyle(
+      fontSize: 16.sp,
+      fontWeight: FontWeight.w500,
+      color: message.isMe ? context.colors.meChatBubbleText : context.colors.contactChatBubbleText,
+    );
+
+    if (message.reactions.isEmpty) {
+      final messageContent = message.content ?? '';
+      final timestampWidth = _getTimestampWidth(context);
+      final minPadding = 8.w;
+
+      // Calculate if timestamp can fit on the last line
+      final textPainter = TextPainter(
+        text: TextSpan(text: messageContent, style: textStyle),
+        textDirection: TextDirection.ltr,
+      );
+
+      textPainter.layout(maxWidth: maxWidth);
+      final lines = textPainter.computeLineMetrics();
+
+      if (lines.isNotEmpty) {
+        final lastLineWidth = lines.last.width;
+        final availableWidth = maxWidth - lastLineWidth;
+        final canFitInline = availableWidth >= (timestampWidth + minPadding);
+
+        if (canFitInline) {
+          // For very short messages, use compact layout
+          if (messageContent.length <= 12) {
+            return Row(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                // Sender avatar for group messages
-                if (isGroupMessage && !message.isMe && !isSameSenderAsNext)
-                  Padding(
-                    padding: EdgeInsets.only(right: 8.w, bottom: 4.h),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(15.r),
-                      child: CachedNetworkImage(
-                        imageUrl: message.sender.imagePath ?? '',
-                        width: 30.w,
-                        height: 30.h,
-                        fit: BoxFit.cover,
-                        placeholder:
-                            (context, url) => Container(
-                              width: 30.w,
-                              height: 30.h,
-                              color: AppColors.glitch950.withValues(alpha: 0.1),
-                            ),
-                        errorWidget:
-                            (context, url, error) => Icon(
-                              CarbonIcons.user_avatar,
-                              size: 30.w,
-                              color: AppColors.glitch50,
-                            ),
+                Text(
+                  messageContent,
+                  style: textStyle,
+                  textAlign: TextAlign.left,
+                ),
+                SizedBox(width: minPadding),
+                TimeAndStatus(message: message, context: context),
+              ],
+            );
+          }
+
+          // For longer messages that fit inline, use spaceBetween layout
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Flexible(
+                child: Text(
+                  messageContent,
+                  style: textStyle,
+                  textAlign: TextAlign.left,
+                ),
+              ),
+              TimeAndStatus(message: message, context: context),
+            ],
+          );
+        }
+      }
+
+      // Fallback to separate lines when timestamp doesn't fit
+      return Column(
+        crossAxisAlignment: message.isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: maxWidth,
+            child: Text(
+              messageContent,
+              style: textStyle,
+              textAlign: TextAlign.start,
+            ),
+          ),
+          SizedBox(height: 4.h),
+          TimeAndStatus(message: message, context: context),
+        ],
+      );
+    } else {
+      // Messages with reactions: Display text separately and timestamp in ReactionsRow
+      return Column(
+        crossAxisAlignment: message.isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: maxWidth,
+            child: Text(
+              message.content ?? '',
+              style: textStyle,
+              textAlign: TextAlign.start,
+            ),
+          ),
+          SizedBox(height: 4.h),
+        ],
+      );
+    }
+  }
+
+  double _getTimestampWidth(BuildContext context) {
+    final timestampText = message.isMe ? '${message.timeSent} ' : message.timeSent;
+
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: timestampText,
+        style: TextStyle(
+          fontSize: 12.sp,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+
+    textPainter.layout();
+    final statusIconWidth = message.isMe ? (8.w + 14.w) : 0;
+    return textPainter.width + statusIconWidth;
+  }
+}
+
+class ReactionsRow extends StatelessWidget {
+  const ReactionsRow({
+    super.key,
+    required this.message,
+    required this.onReactionTap,
+    required this.context,
+  });
+
+  final MessageModel message;
+  final Function(String p1)? onReactionTap;
+  final BuildContext context;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          child: Wrap(
+            spacing: 8.w,
+            children: [
+              ...(() {
+                final reactionGroups = <String, List<Reaction>>{};
+                for (final reaction in message.reactions) {
+                  reactionGroups.putIfAbsent(reaction.emoji, () => []).add(reaction);
+                }
+                return reactionGroups.entries.take(3).map((entry) {
+                  final emoji = entry.key;
+                  final count = entry.value.length;
+                  return GestureDetector(
+                    onTap: () {
+                      // Call the reaction tap handler to add/remove reaction
+                      onReactionTap?.call(emoji);
+                    },
+                    child: Container(
+                      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+                      decoration: BoxDecoration(
+                        color:
+                            message.isMe
+                                ? context.colors.primary.withValues(alpha: 0.1)
+                                : context.colors.secondary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12.r),
                       ),
-                    ),
-                  )
-                else if (isGroupMessage && !message.isMe)
-                  SizedBox(width: 38.w),
-                // Message content
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment:
-                        message.isMe
-                            ? CrossAxisAlignment.end
-                            : CrossAxisAlignment.start,
-                    children: [
-                      // Sender name for group messages
-                      if (isGroupMessage &&
-                          !message.isMe &&
-                          !isSameSenderAsPrevious)
-                        Padding(
-                          padding: EdgeInsets.only(bottom: 4.h, left: 4.w),
-                          child: Text(
-                            message.sender.name,
-                            style: TextStyle(
-                              fontSize: 12.sp,
-                              color: Theme.of(context).colorScheme.error,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      // Message bubble with reactions
-                      Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          // Message content
-                          buildMessageContent(context),
-                          // Reactions
-                          if (message.reactions.isNotEmpty)
-                            Positioned(
-                              bottom: 0.h,
-                              left: message.isMe ? 12.w : null,
-                              right: message.isMe ? null : 12.w,
-                              child: StackedReactions(
-                                reactions: message.reactions,
-                                onReactionTap: onReactionTap,
+                      child: RichText(
+                        text: TextSpan(
+                          children: [
+                            TextSpan(
+                              text: emoji,
+                              style: TextStyle(
+                                fontSize: 14.sp,
+                                color:
+                                    message.isMe
+                                        ? context.colors.primaryForeground
+                                        : context.colors.mutedForeground,
                               ),
                             ),
-                        ],
+                            TextSpan(
+                              text: ' ${count > 99 ? '99+' : count}',
+                              style: TextStyle(
+                                fontSize: 12.sp,
+                                fontWeight: FontWeight.w600,
+                                color:
+                                    message.isMe
+                                        ? context.colors.primaryForeground
+                                        : context.colors.mutedForeground,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ],
+                    ),
+                  );
+                }).toList();
+              })(),
+              if (message.reactions.length > 3)
+                Text(
+                  '...',
+                  style: TextStyle(
+                    fontSize: 14.sp,
+                    color:
+                        message.isMe
+                            ? context.colors.primaryForeground
+                            : context.colors.mutedForeground,
                   ),
+                ),
+            ],
+          ),
+        ),
+        TimeAndStatus(message: message, context: context),
+      ],
+    );
+  }
+}
+
+class TimeAndStatus extends StatelessWidget {
+  const TimeAndStatus({
+    super.key,
+    required this.message,
+    required this.context,
+  });
+
+  final MessageModel message;
+  final BuildContext context;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          message.timeSent,
+          style: TextStyle(
+            fontSize: 12.sp,
+            fontWeight: FontWeight.w600,
+            color: message.isMe ? context.colors.primaryForeground : context.colors.mutedForeground,
+          ),
+        ),
+        if (message.isMe) ...[
+          Gap(8.w),
+          Image.asset(
+            message.status.imagePath,
+            width: 14.w,
+            height: 14.w,
+            color: message.status.bubbleStatusColor(context),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class ReplyBox extends StatelessWidget {
+  const ReplyBox({super.key, this.replyingTo, this.onTap});
+  final MessageModel? replyingTo;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    if (replyingTo == null) {
+      return const SizedBox.shrink();
+    }
+    return Container(
+      margin: EdgeInsets.only(bottom: 8.h),
+
+      child: Material(
+        color: context.colors.secondary,
+
+        child: InkWell(
+          onTap: onTap,
+          child: Container(
+            padding: EdgeInsets.all(8.w),
+            decoration: BoxDecoration(
+              border: Border(
+                left: BorderSide(
+                  color: context.colors.mutedForeground,
+                  width: 3.0,
+                ),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  replyingTo?.sender.name ?? '',
+                  style: TextStyle(
+                    color: context.colors.mutedForeground,
+                    fontSize: 12.sp,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Gap(4.h),
+                Text(
+                  replyingTo?.content ?? '',
+                  style: TextStyle(
+                    color: context.colors.primary,
+                    fontSize: 12.sp,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
@@ -123,217 +393,5 @@ class MessageWidget extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  Widget buildMessageContent(BuildContext context) {
-    final borderRadius =
-        message.isMe
-            ? isSameSenderAsPrevious
-                ? BorderRadius.all(Radius.circular(6.r))
-                : BorderRadius.only(
-                  topLeft: Radius.circular(6.r),
-                  topRight: Radius.circular(6.r),
-                  bottomLeft: Radius.circular(6.r),
-                )
-            : isSameSenderAsPrevious
-            ? BorderRadius.all(Radius.circular(6.r))
-            : BorderRadius.only(
-              topLeft: Radius.circular(6.r),
-              topRight: Radius.circular(6.r),
-              bottomRight: Radius.circular(6.r),
-            );
-
-    final cardColor = message.isMe ? AppColors.glitch950 : AppColors.glitch80;
-    final textColor = message.isMe ? AppColors.glitch50 : AppColors.glitch900;
-
-    return Container(
-      decoration: BoxDecoration(borderRadius: borderRadius),
-      padding: EdgeInsets.only(
-        bottom: message.reactions.isNotEmpty ? 18.h : 0.w,
-      ),
-      child: Container(
-        decoration: BoxDecoration(borderRadius: borderRadius, color: cardColor),
-        padding: EdgeInsets.only(
-          top: 10.w,
-          left: 10.w,
-          right: 10.w,
-          bottom: 10.w,
-        ),
-        child: IntrinsicWidth(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Reply message
-              if (message.replyTo != null)
-                ChatReplyItem(
-                  message: message.replyTo!,
-                  isMe: message.isMe,
-                  isOriginalUser:
-                      message.replyTo!.sender.id == message.sender.id,
-                ),
-
-              // Image message
-              if (message.type == MessageType.image && message.imageUrl != null)
-                Padding(
-                  padding: EdgeInsets.only(bottom: 4.h),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(4.r),
-                    child: CachedNetworkImage(
-                      imageUrl: message.imageUrl!,
-                      width: 0.6.sw,
-                      height: 0.3.sh,
-                      fit: BoxFit.cover,
-                      placeholder:
-                          (context, url) => Container(
-                            height: 0.4.sh,
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.primary.withValues(alpha: 0.1),
-                            child: const Center(
-                              child: CircularProgressIndicator(
-                                color: AppColors.glitch50,
-                              ),
-                            ),
-                          ),
-                      errorWidget:
-                          (context, url, error) => Container(
-                            height: 0.4.sh,
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.primary.withValues(alpha: 0.1),
-                            child: Icon(
-                              CarbonIcons.no_image,
-                              color: AppColors.glitch50,
-                              size: 40.w,
-                            ),
-                          ),
-                    ),
-                  ),
-                ),
-              // Audio message
-              if (message.type == MessageType.audio &&
-                  message.audioPath != null)
-                ChatAudioItem(
-                  audioPath: message.audioPath!,
-                  isMe: message.isMe,
-                ),
-
-              // Text content (for text messages or captions)
-              if ((message.type == MessageType.text ||
-                      (message.content != null &&
-                          message.content!.isNotEmpty)) &&
-                  message.type != MessageType.audio)
-                Padding(
-                  padding: EdgeInsets.only(bottom: 4.h),
-                  child: Container(
-                    alignment:
-                        message.isMe
-                            ? Alignment.centerRight
-                            : Alignment.centerLeft,
-                    child: Row(
-                      // mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            message.content ?? '',
-                            style: TextStyle(
-                              fontSize: 14.sp,
-                              color: textColor,
-                              decoration: TextDecoration.none,
-                              fontFamily: 'OverusedGrotesk',
-                              fontWeight: FontWeight.normal,
-                            ),
-                          ),
-                        ),
-                        if (message.content!.length < 32)
-                          Row(
-                            children: [
-                              Gap(6.w),
-                              Text(
-                                message.timeSent,
-                                style: TextStyle(
-                                  fontSize: 10.sp,
-                                  color: textColor.withValues(alpha: 0.7),
-                                  decoration: TextDecoration.none,
-                                ),
-                              ),
-                              Gap(4.w),
-                              if (message.isMe)
-                                Icon(
-                                  _getStatusIcon(message.status),
-                                  size: 12.w,
-                                  color: _getStatusColor(
-                                    message.status,
-                                    context,
-                                  ),
-                                ),
-                            ],
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-
-              //Message status and time - now properly aligned to bottom right
-              if ((message.content != null &&
-                      message.content!.isNotEmpty &&
-                      message.content!.length >= 32) ||
-                  message.type == MessageType.audio)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      message.timeSent,
-                      style: TextStyle(
-                        fontSize: 10.sp,
-                        color: textColor.withValues(alpha: 0.7),
-                        decoration: TextDecoration.none,
-                      ),
-                    ),
-                    Gap(4.w),
-                    if (message.isMe)
-                      Icon(
-                        _getStatusIcon(message.status),
-                        size: 12.w,
-                        color: _getStatusColor(message.status, context),
-                      ),
-                  ],
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  IconData _getStatusIcon(MessageStatus status) {
-    switch (status) {
-      case MessageStatus.sending:
-        return CarbonIcons.time;
-      case MessageStatus.sent:
-        return CarbonIcons.checkmark_outline;
-      case MessageStatus.delivered:
-        return CarbonIcons.checkmark_outline;
-      case MessageStatus.read:
-        return CarbonIcons.checkmark_filled;
-      case MessageStatus.failed:
-        return CarbonIcons.warning;
-    }
-  }
-
-  Color _getStatusColor(MessageStatus status, BuildContext context) {
-    switch (status) {
-      case MessageStatus.sending:
-        return AppColors.glitch50.withValues(alpha: 0.5);
-      case MessageStatus.sent:
-        return AppColors.glitch50.withValues(alpha: 0.7);
-      case MessageStatus.delivered:
-        return AppColors.glitch50;
-      case MessageStatus.read:
-        return AppColors.glitch100;
-      case MessageStatus.failed:
-        return Theme.of(context).colorScheme.error;
-    }
   }
 }

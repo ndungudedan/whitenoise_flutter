@@ -19,14 +19,13 @@ final _privateConstructorUsedError = UnsupportedError(
 mixin _$AuthState {
   bool get isAuthenticated => throw _privateConstructorUsedError;
   bool get isLoading => throw _privateConstructorUsedError;
+  bool get isBackgroundProcessing => throw _privateConstructorUsedError;
   String? get error => throw _privateConstructorUsedError;
-  Whitenoise? get whitenoise => throw _privateConstructorUsedError;
 
   /// Create a copy of AuthState
   /// with the given fields replaced by the non-null parameter values.
   @JsonKey(includeFromJson: false, includeToJson: false)
-  $AuthStateCopyWith<AuthState> get copyWith =>
-      throw _privateConstructorUsedError;
+  $AuthStateCopyWith<AuthState> get copyWith => throw _privateConstructorUsedError;
 }
 
 /// @nodoc
@@ -37,14 +36,13 @@ abstract class $AuthStateCopyWith<$Res> {
   $Res call({
     bool isAuthenticated,
     bool isLoading,
+    bool isBackgroundProcessing,
     String? error,
-    Whitenoise? whitenoise,
   });
 }
 
 /// @nodoc
-class _$AuthStateCopyWithImpl<$Res, $Val extends AuthState>
-    implements $AuthStateCopyWith<$Res> {
+class _$AuthStateCopyWithImpl<$Res, $Val extends AuthState> implements $AuthStateCopyWith<$Res> {
   _$AuthStateCopyWithImpl(this._value, this._then);
 
   // ignore: unused_field
@@ -59,8 +57,8 @@ class _$AuthStateCopyWithImpl<$Res, $Val extends AuthState>
   $Res call({
     Object? isAuthenticated = null,
     Object? isLoading = null,
+    Object? isBackgroundProcessing = null,
     Object? error = freezed,
-    Object? whitenoise = freezed,
   }) {
     return _then(
       _value.copyWith(
@@ -74,16 +72,16 @@ class _$AuthStateCopyWithImpl<$Res, $Val extends AuthState>
                     ? _value.isLoading
                     : isLoading // ignore: cast_nullable_to_non_nullable
                         as bool,
+            isBackgroundProcessing:
+                null == isBackgroundProcessing
+                    ? _value.isBackgroundProcessing
+                    : isBackgroundProcessing // ignore: cast_nullable_to_non_nullable
+                        as bool,
             error:
                 freezed == error
                     ? _value.error
                     : error // ignore: cast_nullable_to_non_nullable
                         as String?,
-            whitenoise:
-                freezed == whitenoise
-                    ? _value.whitenoise
-                    : whitenoise // ignore: cast_nullable_to_non_nullable
-                        as Whitenoise?,
           )
           as $Val,
     );
@@ -91,8 +89,7 @@ class _$AuthStateCopyWithImpl<$Res, $Val extends AuthState>
 }
 
 /// @nodoc
-abstract class _$$AuthStateImplCopyWith<$Res>
-    implements $AuthStateCopyWith<$Res> {
+abstract class _$$AuthStateImplCopyWith<$Res> implements $AuthStateCopyWith<$Res> {
   factory _$$AuthStateImplCopyWith(
     _$AuthStateImpl value,
     $Res Function(_$AuthStateImpl) then,
@@ -102,14 +99,13 @@ abstract class _$$AuthStateImplCopyWith<$Res>
   $Res call({
     bool isAuthenticated,
     bool isLoading,
+    bool isBackgroundProcessing,
     String? error,
-    Whitenoise? whitenoise,
   });
 }
 
 /// @nodoc
-class __$$AuthStateImplCopyWithImpl<$Res>
-    extends _$AuthStateCopyWithImpl<$Res, _$AuthStateImpl>
+class __$$AuthStateImplCopyWithImpl<$Res> extends _$AuthStateCopyWithImpl<$Res, _$AuthStateImpl>
     implements _$$AuthStateImplCopyWith<$Res> {
   __$$AuthStateImplCopyWithImpl(
     _$AuthStateImpl _value,
@@ -123,8 +119,8 @@ class __$$AuthStateImplCopyWithImpl<$Res>
   $Res call({
     Object? isAuthenticated = null,
     Object? isLoading = null,
+    Object? isBackgroundProcessing = null,
     Object? error = freezed,
-    Object? whitenoise = freezed,
   }) {
     return _then(
       _$AuthStateImpl(
@@ -138,16 +134,16 @@ class __$$AuthStateImplCopyWithImpl<$Res>
                 ? _value.isLoading
                 : isLoading // ignore: cast_nullable_to_non_nullable
                     as bool,
+        isBackgroundProcessing:
+            null == isBackgroundProcessing
+                ? _value.isBackgroundProcessing
+                : isBackgroundProcessing // ignore: cast_nullable_to_non_nullable
+                    as bool,
         error:
             freezed == error
                 ? _value.error
                 : error // ignore: cast_nullable_to_non_nullable
                     as String?,
-        whitenoise:
-            freezed == whitenoise
-                ? _value.whitenoise
-                : whitenoise // ignore: cast_nullable_to_non_nullable
-                    as Whitenoise?,
       ),
     );
   }
@@ -159,8 +155,8 @@ class _$AuthStateImpl extends _AuthState {
   const _$AuthStateImpl({
     this.isAuthenticated = false,
     this.isLoading = false,
+    this.isBackgroundProcessing = false,
     this.error,
-    this.whitenoise,
   }) : super._();
 
   @override
@@ -170,13 +166,14 @@ class _$AuthStateImpl extends _AuthState {
   @JsonKey()
   final bool isLoading;
   @override
-  final String? error;
+  @JsonKey()
+  final bool isBackgroundProcessing;
   @override
-  final Whitenoise? whitenoise;
+  final String? error;
 
   @override
   String toString() {
-    return 'AuthState(isAuthenticated: $isAuthenticated, isLoading: $isLoading, error: $error, whitenoise: $whitenoise)';
+    return 'AuthState(isAuthenticated: $isAuthenticated, isLoading: $isLoading, isBackgroundProcessing: $isBackgroundProcessing, error: $error)';
   }
 
   @override
@@ -186,16 +183,20 @@ class _$AuthStateImpl extends _AuthState {
             other is _$AuthStateImpl &&
             (identical(other.isAuthenticated, isAuthenticated) ||
                 other.isAuthenticated == isAuthenticated) &&
-            (identical(other.isLoading, isLoading) ||
-                other.isLoading == isLoading) &&
-            (identical(other.error, error) || other.error == error) &&
-            (identical(other.whitenoise, whitenoise) ||
-                other.whitenoise == whitenoise));
+            (identical(other.isLoading, isLoading) || other.isLoading == isLoading) &&
+            (identical(other.isBackgroundProcessing, isBackgroundProcessing) ||
+                other.isBackgroundProcessing == isBackgroundProcessing) &&
+            (identical(other.error, error) || other.error == error));
   }
 
   @override
-  int get hashCode =>
-      Object.hash(runtimeType, isAuthenticated, isLoading, error, whitenoise);
+  int get hashCode => Object.hash(
+    runtimeType,
+    isAuthenticated,
+    isLoading,
+    isBackgroundProcessing,
+    error,
+  );
 
   /// Create a copy of AuthState
   /// with the given fields replaced by the non-null parameter values.
@@ -210,8 +211,8 @@ abstract class _AuthState extends AuthState {
   const factory _AuthState({
     final bool isAuthenticated,
     final bool isLoading,
+    final bool isBackgroundProcessing,
     final String? error,
-    final Whitenoise? whitenoise,
   }) = _$AuthStateImpl;
   const _AuthState._() : super._();
 
@@ -220,14 +221,13 @@ abstract class _AuthState extends AuthState {
   @override
   bool get isLoading;
   @override
-  String? get error;
+  bool get isBackgroundProcessing;
   @override
-  Whitenoise? get whitenoise;
+  String? get error;
 
   /// Create a copy of AuthState
   /// with the given fields replaced by the non-null parameter values.
   @override
   @JsonKey(includeFromJson: false, includeToJson: false)
-  _$$AuthStateImplCopyWith<_$AuthStateImpl> get copyWith =>
-      throw _privateConstructorUsedError;
+  _$$AuthStateImplCopyWith<_$AuthStateImpl> get copyWith => throw _privateConstructorUsedError;
 }
