@@ -373,7 +373,9 @@ class MessageWidget extends StatelessWidget {
       spans.add(
         TextSpan(
           text: text.substring(match.start, match.end),
-          style: baseStyle,
+          style: baseStyle.copyWith(
+            color: currentActiveMatch?.currentTextMatch == match ? context.colors.success : null,
+          ),
         ),
       );
 
