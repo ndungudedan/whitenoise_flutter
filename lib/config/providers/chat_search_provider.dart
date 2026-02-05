@@ -120,22 +120,6 @@ class ChatSearchNotifier extends StateNotifier<ChatSearchState> {
     final nextIndex = state.currentMatchIndex + 1;
     if (nextIndex < state.matches.length) {
       state = state.copyWith(currentMatchIndex: nextIndex);
-      var currentMatch = state.matches[nextIndex];
-      if (currentMatch.textMatches.length > 1 &&
-          currentMatch.currentTextMatch != currentMatch.textMatches.last) {
-        final currentTextMatchIndex = currentMatch.textMatches.indexOf(
-          currentMatch.currentTextMatch,
-        );
-        currentMatch = currentMatch.copyWith(
-          currentTextMatch: currentMatch.textMatches[currentTextMatchIndex + 1],
-        );
-        state = state.copyWith(
-          matches:
-              state.matches
-                  .map((match) => match.messageId == currentMatch.messageId ? currentMatch : match)
-                  .toList(),
-        );
-      }
     }
   }
 
@@ -145,22 +129,6 @@ class ChatSearchNotifier extends StateNotifier<ChatSearchState> {
     final prevIndex = state.currentMatchIndex - 1;
     if (prevIndex >= 0) {
       state = state.copyWith(currentMatchIndex: prevIndex);
-      var currentMatch = state.matches[prevIndex];
-      if (currentMatch.textMatches.length > 1 &&
-          currentMatch.currentTextMatch != currentMatch.textMatches.first) {
-        final currentTextMatchIndex = currentMatch.textMatches.indexOf(
-          currentMatch.currentTextMatch,
-        );
-        currentMatch = currentMatch.copyWith(
-          currentTextMatch: currentMatch.textMatches[currentTextMatchIndex - 1],
-        );
-        state = state.copyWith(
-          matches:
-              state.matches
-                  .map((match) => match.messageId == currentMatch.messageId ? currentMatch : match)
-                  .toList(),
-        );
-      }
     }
   }
 

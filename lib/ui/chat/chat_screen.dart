@@ -306,6 +306,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
       allTextMatches.addAll(match.textMatches);
     }
 
+    // Note: currentTextMatch here is a required placeholder.
+    // The actual active match for highlighting comes from currentActiveMatch
+    // in the ChatSearchNotifier provider, not from this value.
     return SearchMatch(
       messageId: messageId,
       messageIndex: messageMatches.first.messageIndex,
