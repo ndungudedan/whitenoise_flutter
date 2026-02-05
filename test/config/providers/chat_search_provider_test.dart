@@ -62,13 +62,13 @@ void main() {
     });
 
     test('performSearchWithMessages builds one match per occurrence across messages', () {
-      final inputMessages = [
+      final testMessages = [
         _makeMessage(id: 'm1', content: 'Hello Hello'),
         _makeMessage(id: 'm2', content: 'say hello again'),
         _makeMessage(id: 'm3', content: 'no match here'),
       ];
 
-      notifier.performSearchWithMessages('hello', inputMessages);
+      notifier.performSearchWithMessages('hello', testMessages);
 
       final actualState = notifier.state;
       expect(actualState.matches.isNotEmpty, true);
